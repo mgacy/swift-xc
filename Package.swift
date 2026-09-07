@@ -14,7 +14,7 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/mgacy/swift-version-file-plugin.git", from: "0.2.0"),
-        .package(url: "https://github.com/apple/swift-argument-parser", .upToNextMinor(from: "1.8.0")),
+        .package(url: "https://github.com/apple/swift-argument-parser", .upToNextMinor(from: "1.8.0"))
     ],
     targets: [
         .executableTarget(
@@ -29,8 +29,13 @@ let package = Package(
             dependencies: []
         ),
         .testTarget(
-            name: "XCCoreTests",
-            dependencies: ["XCCore"]
+            name: "xcTests",
+            dependencies: ["xc"]
         ),
+        .testTarget(
+            name: "XCCoreTests",
+            dependencies: ["XCCore"],
+            resources: [.process("Fixtures")]
+        )
     ]
 )

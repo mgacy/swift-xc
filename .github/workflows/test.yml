@@ -4,31 +4,44 @@ on:
   workflow_call:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
     types:
       - opened
       - reopened
+      - synchronize
       - ready_for_review
+    paths:
+      - ".mise.toml"
+      - "scripts/**"
+      - "Sources/**"
+      - "Tests/**"
+      - "Package.swift"
+      - "Package.resolved"
 
 jobs:
   unit_tests:
     name: Run Tests
-    runs-on: ubuntu-latest
+    runs-on: macos-15
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
+
+      - name: Setup Swift
+        uses: swift-actions/setup-swift@v3
+        with:
+          swift-version: "6.3.2"
 
       - name: Cache dependencies
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: .build
-          
           key: ${{ runner.os }}-spm-${{ hashFiles('**/Package.resolved') }}
           restore-keys: |
             ${{ runner.os }}-spm-
-          
 
       - name: Build
         run: swift build -v
