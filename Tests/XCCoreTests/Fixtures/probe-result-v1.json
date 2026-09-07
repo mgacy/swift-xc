@@ -1,0 +1,43 @@
+{
+  "artifacts" : {
+    "result" : "/fixture/cache/result.json",
+    "retained" : true
+  },
+  "outcome" : "infrastructure_error",
+  "run" : {
+    "duration_ms" : 12,
+    "id" : "20260907T024233Z-3f91c04a2b6d",
+    "started_at" : "2026-09-07T02:42:33Z"
+  },
+  "schema_version" : 1,
+  "storage" : {
+    "locations" : [
+      {
+        "completed" : false,
+        "operations" : [
+          {
+            "duration_ms" : 1,
+            "error" : {
+              "code" : 513,
+              "domain" : "NSCocoaErrorDomain",
+              "message" : "Permission denied."
+            },
+            "kind" : "create_directory",
+            "path" : "/fixture/support/xc/simulator-pools",
+            "succeeded" : false
+          }
+        ],
+        "path" : "/fixture/support/xc/simulator-pools",
+        "preexisting" : false,
+        "role" : "application_support"
+      }
+    ]
+  },
+  "tool_version" : "0.0.1",
+  "workspace" : {
+    "id" : "project-2350ab29b78d",
+    "repository_root" : "/fixture/project",
+    "resolution" : "git_worktree",
+    "worktree_root" : "/fixture/project"
+  }
+}

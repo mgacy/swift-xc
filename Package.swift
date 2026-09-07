@@ -29,8 +29,13 @@ let package = Package(
             dependencies: []
         ),
         .testTarget(
+            name: "xcTests",
+            dependencies: ["xc"]
+        ),
+        .testTarget(
             name: "XCCoreTests",
-            dependencies: ["XCCore"]
+            dependencies: ["XCCore"],
+            resources: [.process("Fixtures")]
         ),
     ]
 )

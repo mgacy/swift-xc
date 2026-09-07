@@ -2,16 +2,17 @@
 //  XC.swift
 //  xc
 //
-//  Created by Mathew Gacy on 09/06/26.
+//  Created by Mathew Gacy on 9/6/26.
 //  Copyright © 2026 Mathew Gacy. All rights reserved.
 //
 
 import ArgumentParser
-import XCCore
 
-@main
+// swiftlint:disable:next type_name
 struct XC: ParsableCommand {
-    func run() throws {
-        try XCCore.run()
-    }
+    static let configuration = CommandConfiguration(
+        commandName: "xc",
+        version: Version.number,
+        subcommands: [Run.self]
+    )
 }

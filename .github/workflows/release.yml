@@ -35,6 +35,26 @@ jobs:
       - name: Verify executable
         run: .build/release/xc --version
 
+      - name: Smoke test run
+        shell: bash
+        run: |
+          set -euo pipefail
+          result="$RUNNER_TEMP/xc-result.json"
+          .build/release/xc run > "$result"
+          python3 - "$result" <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          output = pathlib.Path(sys.argv[1]).read_bytes()
+          document = json.loads(output)
+          assert document["outcome"] == "passed"
+          assert document["artifacts"]["retained"] is True
+          artifact = pathlib.Path(document["artifacts"]["result"])
+          assert artifact.is_absolute()
+          assert artifact.read_bytes() == output
+          PY
+
       - name: Prepare artifact
         run: |
           mkdir -p dist
