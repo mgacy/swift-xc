@@ -22,7 +22,9 @@ public struct WorkspaceIdentity: Sendable, Equatable {
     public let repositoryRoot: URL?
     public let resolution: Resolution
 
-    /// Creates an identity from canonical paths; a missing repository contributes an empty hash component.
+    /// Creates an identity from canonical paths; a missing repository contributes an empty hash
+    /// component.
+    ///
     /// - Parameters:
     ///   - worktreeRoot: The workspace directory.
     ///   - repositoryRoot: The shared repository directory, when known.

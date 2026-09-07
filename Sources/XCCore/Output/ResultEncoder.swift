@@ -20,7 +20,8 @@ public enum ResultEncoder {
     /// try bytes.write(to: resultURL, options: .atomic)
     /// ```
     /// - Parameter document: The versioned result to serialize.
-    /// - Returns: Sorted, pretty-printed UTF-8 JSON with unescaped slashes, ISO-8601 dates, and one trailing newline.
+    /// - Returns: Sorted, pretty-printed UTF-8 JSON with unescaped slashes, ISO-8601 dates, and
+    ///   one trailing newline.
     /// - Throws: `ResultEncodingError` when the document cannot be encoded.
     public static func encode(_ document: ProbeResultDocument.V1) throws(ResultEncodingError) -> Data {
         let encoder = JSONEncoder()

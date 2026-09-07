@@ -12,6 +12,7 @@ public struct RunIdentifier: Sendable, Equatable, Hashable {
     public let rawValue: String
 
     /// Creates a UTC timestamp followed by 48 random bits encoded as hexadecimal.
+    ///
     /// - Parameter date: The instant represented by the timestamp.
     public init(date: Date = Date()) {
         let formatter = DateFormatter()

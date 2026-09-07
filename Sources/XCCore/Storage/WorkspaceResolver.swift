@@ -19,10 +19,13 @@ public struct WorkspaceResolutionError: Error, Sendable {
 }
 
 public enum WorkspaceResolver {
-    /// Finds the nearest git root, otherwise the nearest package root, otherwise the working directory.
+    /// Finds the nearest git root, otherwise the nearest package root, otherwise the working
+    /// directory.
+    ///
     /// - Parameter workingDirectory: An existing directory from which to search upward.
     /// - Returns: An identity with symlinks resolved in both root paths.
-    /// - Throws: `WorkspaceResolutionError` for inaccessible paths or malformed linked-worktree metadata.
+    /// - Throws: `WorkspaceResolutionError` for inaccessible paths or malformed linked-worktree
+    ///   metadata.
     public static func resolve(workingDirectory: URL) throws(WorkspaceResolutionError) -> WorkspaceIdentity {
         let working = workingDirectory.resolvingSymlinksInPath()
         guard try isDirectory(working) else { throw invalid(working, "The working directory is not a directory.") }

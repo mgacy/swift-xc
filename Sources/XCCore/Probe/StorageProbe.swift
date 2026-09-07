@@ -22,7 +22,9 @@ public struct StorageProbe: Sendable {
     }
 
     /// Exercises every location and cleans up owned stubs and empty disposable directories.
+    ///
     /// The run directory and its ancestors remain available for artifact retention.
+    ///
     /// - Returns: Ordered evidence for every location, including failures and cleanup attempts.
     public func run() -> [LocationProbe] {
         layout.locations.map { probe($0) }
@@ -57,6 +59,7 @@ public struct StorageProbe: Sendable {
     }
 
     /// Removes owned directories deepest-first and records failures without stopping cleanup.
+    ///
     /// - Parameters:
     ///   - created: Owned directories in parent-before-child creation order.
     ///   - operations: Evidence to append for every attempted removal.
@@ -104,6 +107,7 @@ public struct StorageProbe: Sendable {
     }
 
     /// Creates missing parents one at a time; only successful creations become owned.
+    ///
     /// - Throws: The Foundation failure for the first directory that cannot be created.
     private func createDirectories(_ directory: URL, created: inout [URL]) throws(DirectoryCreationFailure) {
         var missing: [URL] = []
@@ -128,6 +132,7 @@ public struct StorageProbe: Sendable {
     }
 
     /// Removes a directory only when it is empty, including at the instant of removal.
+    ///
     /// - Throws: The POSIX failure if removal is refused.
     private func removeEmptyDirectory(_ directory: URL) throws(NSError) {
         guard directory.path.withCString({ Darwin.rmdir($0) }) == 0 else {
@@ -137,8 +142,12 @@ public struct StorageProbe: Sendable {
 
     /// - Returns: Whether the operation succeeded, after appending its evidence.
     @discardableResult
-    private func record(_ kind: ProbeOperation.Kind, path: URL, operations: inout [ProbeOperation],
-                        action: () throws -> Int?) -> Bool {
+    private func record(
+        _ kind: ProbeOperation.Kind,
+        path: URL,
+        operations: inout [ProbeOperation],
+        action: () throws -> Int?
+    ) -> Bool {
         let start = ContinuousClock.now
         do {
             let bytes = try action()

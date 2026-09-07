@@ -8,10 +8,13 @@
 
 import Foundation
 
+/// Projects probe evidence into a V1 document for JSON serialization.
 public enum ProbeResultProjection {
     /// Projects storage evidence, including any artifact write failure.
+    ///
     /// - Parameter report: The completed probe evidence and run metadata.
-    /// - Returns: A V1 document. Retention assumes the pending artifact write succeeds when a path exists.
+    /// - Returns: A V1 document. Retention assumes the pending artifact write succeeds when a path
+    ///   exists.
     public static func project(_ report: StorageProbeReport) -> ProbeResultDocument.V1 {
         let failed = report.locations.contains { $0.operations.contains { !$0.succeeded } }
             || report.artifactWrite?.succeeded == false
@@ -34,6 +37,7 @@ public enum ProbeResultProjection {
     }
 
     /// Projects a usage failure without run or filesystem claims.
+    ///
     /// - Parameters:
     ///   - reason: The parser's explanation, preserved verbatim.
     ///   - toolVersion: The emitting executable's version.
@@ -43,6 +47,9 @@ public enum ProbeResultProjection {
               run: nil, workspace: nil, artifacts: nil, storage: nil)
     }
 
+    /// Projects a completed storage operation.
+    ///
+    /// - Parameter operation: The completed storage operation.
     /// - Returns: Wire evidence with milliseconds and explicit operation spelling.
     private static func operation(_ operation: ProbeOperation) -> ProbeResultDocument.Operation {
         let kind: String
@@ -60,6 +67,9 @@ public enum ProbeResultProjection {
                      error: operation.failure.map { .init(message: $0.message, domain: $0.domain, code: $0.code) })
     }
 
+    /// Returns the V1 resolution spelling for a workspace identity.
+    ///
+    /// - Parameter resolution: The workspace identity resolution.
     /// - Returns: The V1 resolution spelling.
     private static func resolution(_ resolution: WorkspaceIdentity.Resolution) -> String {
         switch resolution {
@@ -70,6 +80,9 @@ public enum ProbeResultProjection {
         }
     }
 
+    /// Returns the elapsed milliseconds for a duration, preserving fractional milliseconds.
+    ///
+    /// - Parameter duration: The duration to convert to milliseconds.
     /// - Returns: Elapsed milliseconds, preserving fractional milliseconds.
     private static func milliseconds(_ duration: Duration) -> Double {
         let parts = duration.components

@@ -20,15 +20,22 @@ public struct RunSession: Sendable {
     private let caches: Result<URL, StorageResolutionError>?
     private let applicationSupport: Result<URL, StorageResolutionError>?
 
+    /// Creates a run session with injected roots for testing, or nil to resolve the user-domain
+    /// Foundation directories.
+    ///
     /// - Parameters:
     ///   - toolVersion: The version recorded in the document.
     ///   - workingDirectory: The directory from which workspace discovery begins.
-    ///   - caches: An injected cache root or failure; nil resolves the user-domain Foundation directory.
-    ///   - applicationSupport: An injected support root or failure; nil resolves the user-domain Foundation directory.
-    public init(toolVersion: String,
-                workingDirectory: URL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath),
-                caches: Result<URL, StorageResolutionError>? = nil,
-                applicationSupport: Result<URL, StorageResolutionError>? = nil) {
+    ///   - caches: An injected cache root or failure; nil resolves the user-domain Foundation
+    ///     directory.
+    ///   - applicationSupport: An injected support root or failure; nil resolves the user-domain
+    ///     Foundation directory.
+    public init(
+        toolVersion: String,
+        workingDirectory: URL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath),
+        caches: Result<URL, StorageResolutionError>? = nil,
+        applicationSupport: Result<URL, StorageResolutionError>? = nil
+    ) {
         self.toolVersion = toolVersion
         self.workingDirectory = workingDirectory
         self.caches = caches
@@ -44,7 +51,8 @@ public struct RunSession: Sendable {
     ///
     /// - Parameter runIdentifier: A unique identifier for this invocation's artifact directory.
     /// - Returns: Final bytes and their outcome, including contained filesystem failures.
-    /// - Throws: `ResultEncodingError` if the initial or artifact-failure document cannot be encoded.
+    /// - Throws: `ResultEncodingError` if the initial or artifact-failure document cannot be
+    ///   encoded.
     public func run(runIdentifier: RunIdentifier = RunIdentifier()) throws(ResultEncodingError) -> Output {
         let startedAt = Date()
         let start = ContinuousClock.now
@@ -72,7 +80,7 @@ public struct RunSession: Sendable {
         return Output(bytes: try ResultEncoder.encode(failedDocument), outcome: failedDocument.outcome)
     }
 
-    /// - Returns: Workspace identity or its original resolution failure.
+    /// Returns the workspace identity or its original resolution failure.
     private func resolveWorkspace() -> Result<WorkspaceIdentity, WorkspaceResolutionError> {
         do {
             return .success(try WorkspaceResolver.resolve(workingDirectory: workingDirectory))
@@ -81,6 +89,8 @@ public struct RunSession: Sendable {
         }
     }
 
+    /// Writes the artifact document atomically, returning a failure operation if the write fails.
+    ///
     /// - Parameters:
     ///   - bytes: The complete newline-terminated document.
     ///   - path: The destination file.

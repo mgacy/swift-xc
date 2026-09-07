@@ -33,6 +33,7 @@ public struct StorageLayout: Sendable {
     public let locations: [Location]
 
     /// Constructs locations using injected roots without creating directories.
+    ///
     /// - Parameters:
     ///   - caches: The user cache root.
     ///   - applicationSupport: The user Application Support root.
@@ -44,6 +45,7 @@ public struct StorageLayout: Sendable {
     }
 
     /// Preserves root failures separately so independent locations remain available.
+    ///
     /// - Parameters:
     ///   - caches: The cache root or its resolution failure.
     ///   - applicationSupport: The Application Support root or its resolution failure.
@@ -76,6 +78,7 @@ public struct StorageLayout: Sendable {
     }
 
     /// Resolves a user-domain Foundation search directory without creating it.
+    ///
     /// - Parameter directory: The Foundation directory to locate.
     /// - Returns: A canonical root or the unmodified Foundation failure with no invented path.
     public static func resolveRoot(_ directory: FileManager.SearchPathDirectory) -> Result<URL, StorageResolutionError> {

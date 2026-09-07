@@ -17,6 +17,7 @@ public enum StorageRole: String, CaseIterable, Sendable {
     case worktreeDerivedData = "worktree_derived_data"
 
     /// Constructs the role's directory beneath its resolved root.
+    ///
     /// - Parameters:
     ///   - root: The cache, Application Support, or worktree root appropriate to this role.
     ///   - workspaceID: The workspace identity used by cache roles.
