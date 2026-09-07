@@ -1,0 +1,1044 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "permission": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/__schema0"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/__schema1"
+      }
+    },
+    "opencode": {
+      "type": "object",
+      "properties": {
+        "permission": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/__schema3"
+          }
+        }
+      },
+      "additionalProperties": {}
+    },
+    "hermes": {
+      "type": "object",
+      "properties": {
+        "permission": {
+          "$ref": "#/$defs/__schema4"
+        }
+      },
+      "additionalProperties": {}
+    },
+    "cline": {
+      "type": "object",
+      "properties": {
+        "permission": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "allowRedirects": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": {}
+    },
+    "kilo": {
+      "type": "object",
+      "properties": {
+        "permission": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/__schema3"
+          }
+        },
+        "sandbox": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": {}
+        }
+      },
+      "additionalProperties": {}
+    },
+    "claudecode": {
+      "type": "object",
+      "properties": {
+        "permission": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "permissions": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": {}
+        },
+        "sandbox": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": {}
+        }
+      },
+      "additionalProperties": {}
+    },
+    "vibe": {
+      "type": "object",
+      "properties": {
+        "permission": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "sensitive_patterns": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "additionalProperties": {}
+          }
+        },
+        "enabled_tools": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": {}
+    },
+    "cursor": {
+      "type": "object",
+      "properties": {
+        "permission": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "approvalMode": {
+          "type": "string",
+          "enum": [
+            "allowlist",
+            "auto-review",
+            "unrestricted"
+          ]
+        },
+        "sandbox": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": {}
+        }
+      },
+      "additionalProperties": {}
+    },
+    "deepagents": {
+      "type": "object",
+      "properties": {
+        "permission": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "startup": {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": [
+                "manual",
+                "auto",
+                "yolo"
+              ]
+            },
+            "yolo_switcher": {
+              "type": "boolean"
+            },
+            "read_project_dotenv": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": {}
+        }
+      },
+      "additionalProperties": {}
+    },
+    "qwencode": {
+      "type": "object",
+      "properties": {
+        "permission": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "tools": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": {}
+        },
+        "security": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": {}
+        },
+        "autoMode": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": {}
+        }
+      },
+      "additionalProperties": {}
+    },
+    "reasonix": {
+      "type": "object",
+      "properties": {
+        "permission": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "sandbox": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": {}
+        },
+        "agent": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": {}
+        },
+        "rawAllow": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "rawAsk": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "rawDeny": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "allowDynamicBash": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": {}
+    },
+    "factorydroid": {
+      "type": "object",
+      "properties": {
+        "permission": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "commandBlocklist": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "disabledSkills": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": {}
+    },
+    "warp": {
+      "type": "object",
+      "properties": {
+        "permission": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "agent_mode_coding_permissions": {
+          "type": "string",
+          "enum": [
+            "always_ask_before_reading",
+            "always_allow_reading",
+            "allow_reading_specific_files"
+          ]
+        },
+        "agent_mode_coding_file_read_allowlist": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "agent_mode_execute_readonly_commands": {
+          "type": "boolean"
+        },
+        "execution_profile": {
+          "type": "object",
+          "properties": {
+            "read_files": {
+              "$ref": "#/$defs/__schema5"
+            },
+            "apply_code_diffs": {
+              "$ref": "#/$defs/__schema5"
+            },
+            "execute_commands": {
+              "$ref": "#/$defs/__schema5"
+            },
+            "mcp_permissions": {
+              "$ref": "#/$defs/__schema5"
+            },
+            "write_to_pty": {
+              "type": "string",
+              "enum": [
+                "always_allow",
+                "always_ask",
+                "ask_on_first_write"
+              ]
+            },
+            "ask_user_question": {
+              "type": "string",
+              "enum": [
+                "never",
+                "ask_except_in_auto_approve",
+                "always_ask"
+              ]
+            },
+            "run_agents": {
+              "type": "string",
+              "enum": [
+                "never_allow",
+                "always_allow",
+                "always_ask"
+              ]
+            },
+            "computer_use": {
+              "type": "string",
+              "enum": [
+                "never",
+                "always_ask",
+                "always_allow"
+              ]
+            },
+            "directory_allowlist": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "mcp_allowlist": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "mcp_denylist": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": {}
+        }
+      },
+      "additionalProperties": {}
+    },
+    "junie": {
+      "type": "object",
+      "properties": {
+        "permission": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "allowReadonlyCommands": {
+          "type": "boolean"
+        },
+        "defaultBehavior": {
+          "$ref": "#/$defs/__schema6"
+        },
+        "readSecretFile": {
+          "type": "object",
+          "properties": {
+            "default": {
+              "$ref": "#/$defs/__schema6"
+            },
+            "rules": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "prefix": {
+                    "type": "string"
+                  },
+                  "pattern": {
+                    "type": "string"
+                  },
+                  "action": {
+                    "$ref": "#/$defs/__schema6"
+                  }
+                },
+                "required": [
+                  "action"
+                ],
+                "additionalProperties": {}
+              }
+            }
+          },
+          "additionalProperties": {}
+        },
+        "ruleDefaults": {
+          "type": "object",
+          "properties": {
+            "executables": {
+              "$ref": "#/$defs/__schema6"
+            },
+            "fileEditing": {
+              "$ref": "#/$defs/__schema6"
+            },
+            "mcpTools": {
+              "$ref": "#/$defs/__schema6"
+            },
+            "readOutsideProject": {
+              "$ref": "#/$defs/__schema6"
+            }
+          },
+          "additionalProperties": {}
+        }
+      },
+      "additionalProperties": {}
+    },
+    "takt": {
+      "type": "object",
+      "properties": {
+        "permission": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "step_permission_overrides": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "string",
+            "enum": [
+              "readonly",
+              "edit",
+              "full"
+            ]
+          }
+        },
+        "provider_options": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": {}
+        },
+        "workflow_arpeggio": {
+          "type": "object",
+          "properties": {
+            "custom_data_source_modules": {
+              "type": "boolean"
+            },
+            "custom_merge_inline_js": {
+              "type": "boolean"
+            },
+            "custom_merge_files": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        },
+        "workflow_runtime_prepare": {
+          "type": "object",
+          "properties": {
+            "custom_scripts": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        },
+        "workflow_command_gates": {
+          "type": "object",
+          "properties": {
+            "custom_scripts": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        },
+        "sync_conflict_resolver": {
+          "type": "object",
+          "properties": {
+            "auto_approve_tools": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        },
+        "allow_git_hooks": {
+          "type": "boolean"
+        },
+        "allow_git_filters": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": {}
+    },
+    "amp": {
+      "type": "object",
+      "properties": {
+        "permission": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "permissions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "tool": {
+                "type": "string"
+              },
+              "action": {
+                "type": "string",
+                "enum": [
+                  "allow",
+                  "ask",
+                  "reject",
+                  "delegate"
+                ]
+              },
+              "context": {
+                "type": "string",
+                "enum": [
+                  "thread",
+                  "subagent"
+                ]
+              }
+            },
+            "required": [
+              "tool",
+              "action"
+            ],
+            "additionalProperties": {}
+          }
+        },
+        "mcpPermissions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": [
+                  "allow",
+                  "reject"
+                ]
+              }
+            },
+            "required": [
+              "action"
+            ],
+            "additionalProperties": {}
+          }
+        },
+        "guardedFiles": {
+          "type": "object",
+          "properties": {
+            "allowlist": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": {}
+        },
+        "dangerouslyAllowAll": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": {}
+    },
+    "antigravity-cli": {
+      "type": "object",
+      "properties": {
+        "permission": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "toolPermission": {
+          "type": "string",
+          "enum": [
+            "request-review",
+            "proceed-in-sandbox",
+            "always-proceed",
+            "strict"
+          ]
+        },
+        "enableTerminalSandbox": {
+          "type": "boolean"
+        },
+        "artifactReviewPolicy": {
+          "type": "string",
+          "enum": [
+            "asks-for-review",
+            "agent-decides",
+            "always-proceed"
+          ]
+        },
+        "allowNonWorkspaceAccess": {
+          "type": "boolean"
+        },
+        "agentMode": {
+          "type": "string",
+          "enum": [
+            "default",
+            "accept-edits",
+            "plan"
+          ]
+        }
+      },
+      "additionalProperties": {}
+    },
+    "pi": {
+      "type": "object",
+      "properties": {
+        "permission": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "defaultTools": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": {}
+    },
+    "augmentcode": {
+      "type": "object",
+      "properties": {
+        "permission": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "toolPermissions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "toolName": {
+                "type": "string"
+              },
+              "eventType": {
+                "type": "string",
+                "enum": [
+                  "tool-call",
+                  "tool-response"
+                ]
+              },
+              "permission": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "allow",
+                      "deny",
+                      "ask-user",
+                      "webhook-policy",
+                      "script-policy"
+                    ]
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "additionalProperties": {}
+              }
+            },
+            "required": [
+              "toolName",
+              "permission"
+            ],
+            "additionalProperties": {}
+          }
+        }
+      },
+      "additionalProperties": {}
+    },
+    "kiro": {
+      "type": "object",
+      "properties": {
+        "permission": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "toolsSettings": {
+          "type": "object",
+          "properties": {
+            "shell": {
+              "type": "object",
+              "properties": {
+                "autoAllowReadonly": {
+                  "type": "boolean"
+                },
+                "denyByDefault": {
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": {}
+            },
+            "aws": {
+              "type": "object",
+              "properties": {
+                "allowedServices": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "deniedServices": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "autoAllowReadonly": {
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": {}
+            },
+            "web_fetch": {
+              "type": "object",
+              "properties": {
+                "trusted": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "blocked": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "additionalProperties": {}
+            }
+          },
+          "additionalProperties": {}
+        }
+      },
+      "additionalProperties": {}
+    },
+    "codexcli": {
+      "type": "object",
+      "properties": {
+        "permission": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "base_permission_profile": {
+          "type": "string",
+          "enum": [
+            ":read-only",
+            ":workspace",
+            ":danger-full-access"
+          ]
+        },
+        "approval_policy": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "untrusted",
+                "on-request",
+                "on-failure",
+                "never"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": {}
+            }
+          ]
+        },
+        "sandbox_mode": {
+          "type": "string",
+          "enum": [
+            "read-only",
+            "workspace-write",
+            "danger-full-access"
+          ]
+        },
+        "sandbox_workspace_write": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": {}
+        },
+        "apps": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": {}
+        },
+        "approvals_reviewer": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "user",
+                "auto_review",
+                "guardian_subagent"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": {}
+            }
+          ]
+        },
+        "tui": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": {}
+        },
+        "git_write_rules": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": {}
+    },
+    "zed": {
+      "type": "object",
+      "properties": {
+        "permission": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "sandbox_permissions": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": {}
+        },
+        "profiles": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "tools": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "boolean"
+                }
+              },
+              "enable_all_context_servers": {
+                "type": "boolean"
+              },
+              "context_servers": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": {}
+              },
+              "default_model": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": {}
+              }
+            },
+            "additionalProperties": {}
+          }
+        }
+      },
+      "additionalProperties": {}
+    },
+    "devin": {
+      "type": "object",
+      "properties": {
+        "permission": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "sandbox": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": {}
+        }
+      },
+      "additionalProperties": {}
+    },
+    "antigravity-ide": {
+      "$ref": "#/$defs/__schema7"
+    },
+    "copilot": {
+      "$ref": "#/$defs/__schema7"
+    },
+    "copilotcli": {
+      "$ref": "#/$defs/__schema7"
+    },
+    "goose": {
+      "$ref": "#/$defs/__schema7"
+    },
+    "grokcli": {
+      "$ref": "#/$defs/__schema7"
+    },
+    "kimi-code": {
+      "type": "object",
+      "properties": {
+        "permission": {
+          "$ref": "#/$defs/__schema4"
+        },
+        "defaultPermissionMode": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "yolo",
+            "auto"
+          ]
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "decision": {
+                "$ref": "#/$defs/__schema2"
+              },
+              "pattern": {
+                "type": "string"
+              },
+              "scope": {
+                "type": "string",
+                "enum": [
+                  "turn-override",
+                  "session-runtime",
+                  "project",
+                  "user"
+                ]
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "decision",
+              "pattern"
+            ],
+            "additionalProperties": {}
+          }
+        },
+        "tools": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "disabled": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": {}
+        }
+      },
+      "additionalProperties": {}
+    },
+    "roo": {
+      "$ref": "#/$defs/__schema7"
+    },
+    "rovodev": {
+      "$ref": "#/$defs/__schema7"
+    },
+    "zoocode": {
+      "$ref": "#/$defs/__schema7"
+    }
+  },
+  "required": [
+    "permission"
+  ],
+  "additionalProperties": {},
+  "$defs": {
+    "__schema0": {
+      "type": "string"
+    },
+    "__schema1": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/__schema2"
+      }
+    },
+    "__schema2": {
+      "type": "string",
+      "enum": [
+        "allow",
+        "ask",
+        "deny"
+      ]
+    },
+    "__schema3": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/__schema2"
+        },
+        {
+          "$ref": "#/$defs/__schema1"
+        }
+      ]
+    },
+    "__schema4": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/__schema0"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/__schema1"
+      }
+    },
+    "__schema5": {
+      "type": "string",
+      "enum": [
+        "agent_decides",
+        "always_allow",
+        "always_ask"
+      ]
+    },
+    "__schema6": {
+      "type": "string",
+      "enum": [
+        "allow",
+        "ask"
+      ]
+    },
+    "__schema7": {
+      "type": "object",
+      "properties": {
+        "permission": {
+          "$ref": "#/$defs/__schema4"
+        }
+      },
+      "additionalProperties": {}
+    }
+  },
+  "$id": "https://github.com/dyoshikawa/rulesync/releases/latest/download/permissions-schema.json",
+  "title": "Rulesync Permissions Configuration",
+  "description": "Permissions configuration file for Rulesync CLI tool"
+}

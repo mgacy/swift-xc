@@ -1,0 +1,351 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "outputRoots": {
+      "anyOf": [
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "targets": {
+      "anyOf": [
+        {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "agentsmd",
+              "aiassistant",
+              "amp",
+              "antigravity-cli",
+              "antigravity-ide",
+              "antigravity-plugin",
+              "augmentcode",
+              "augmentcode-legacy",
+              "claudecode",
+              "claudecode-legacy",
+              "cline",
+              "codebuddy",
+              "codexcli",
+              "copilot",
+              "copilotcli",
+              "crush",
+              "cursor",
+              "deepagents",
+              "factorydroid",
+              "goose",
+              "grokcli",
+              "hermesagent",
+              "junie",
+              "kilo",
+              "kimi-code",
+              "kiro",
+              "kiro-cli",
+              "kiro-ide",
+              "musecode",
+              "opencode",
+              "pi",
+              "qwencode",
+              "reasonix",
+              "replit",
+              "roo",
+              "rovodev",
+              "takt",
+              "vibe",
+              "warp",
+              "devin",
+              "zcode",
+              "zed",
+              "zoocode",
+              "claudecode-plugin",
+              "agentsskills",
+              "*"
+            ]
+          }
+        },
+        {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              },
+              {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {}
+                    },
+                    {
+                      "$ref": "#/$defs/__schema1"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "features": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/__schema0"
+      }
+    },
+    "verbose": {
+      "type": "boolean"
+    },
+    "delete": {
+      "type": "boolean"
+    },
+    "global": {
+      "type": "boolean"
+    },
+    "silent": {
+      "type": "boolean"
+    },
+    "simulateCommands": {
+      "type": "boolean"
+    },
+    "simulateSubagents": {
+      "type": "boolean"
+    },
+    "simulateSkills": {
+      "type": "boolean"
+    },
+    "deriveSubprojectPathFromGlobs": {
+      "type": "boolean"
+    },
+    "flattenedCommandNaming": {
+      "type": "string",
+      "enum": [
+        "basename",
+        "path"
+      ]
+    },
+    "language": {
+      "type": "string",
+      "enum": [
+        "en",
+        "ja",
+        "zh-CN",
+        "zh-TW",
+        "ko",
+        "fr",
+        "de",
+        "es",
+        "pt-BR",
+        "ru"
+      ]
+    },
+    "gitignoreTargetsOnly": {
+      "type": "boolean"
+    },
+    "gitignoreDestination": {
+      "$ref": "#/$defs/__schema1"
+    },
+    "dryRun": {
+      "type": "boolean"
+    },
+    "check": {
+      "type": "boolean"
+    },
+    "inputRoot": {
+      "type": "string"
+    },
+    "inputRoots": {
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/__schema2"
+      }
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "$ref": "#/$defs/__schema3"
+          },
+          "skills": {
+            "$ref": "#/$defs/__schema4"
+          },
+          "rules": {
+            "$ref": "#/$defs/__schema5"
+          },
+          "transport": {
+            "$ref": "#/$defs/__schema6"
+          },
+          "ref": {
+            "$ref": "#/$defs/__schema7"
+          },
+          "path": {
+            "$ref": "#/$defs/__schema8"
+          },
+          "rulesPath": {
+            "$ref": "#/$defs/__schema9"
+          },
+          "registry": {
+            "$ref": "#/$defs/__schema10"
+          },
+          "tokenEnv": {
+            "$ref": "#/$defs/__schema11"
+          },
+          "agent": {
+            "$ref": "#/$defs/__schema12"
+          },
+          "scope": {
+            "$ref": "#/$defs/__schema13"
+          }
+        },
+        "required": [
+          "source"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "__schema0": {
+      "anyOf": [
+        {
+          "type": "string",
+          "enum": [
+            "rules",
+            "mcp",
+            "subagents",
+            "commands",
+            "skills",
+            "hooks",
+            "permissions",
+            "checks",
+            "*"
+          ]
+        },
+        {
+          "type": "string",
+          "const": "ignore",
+          "deprecated": true,
+          "description": "Deprecated: use the permissions feature. Ignore remains supported for compatibility throughout Rulesync 14.x."
+        }
+      ]
+    },
+    "__schema1": {
+      "type": "string",
+      "enum": [
+        "gitignore",
+        "gitattributes"
+      ]
+    },
+    "__schema2": {
+      "type": "string"
+    },
+    "__schema3": {
+      "type": "string",
+      "minLength": 1
+    },
+    "__schema4": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "__schema5": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "__schema6": {
+      "type": "string",
+      "enum": [
+        "github",
+        "git",
+        "npm"
+      ]
+    },
+    "__schema7": {
+      "type": "string"
+    },
+    "__schema8": {
+      "type": "string"
+    },
+    "__schema9": {
+      "type": "string"
+    },
+    "__schema10": {
+      "type": "string"
+    },
+    "__schema11": {
+      "type": "string"
+    },
+    "__schema12": {
+      "type": "string",
+      "enum": [
+        "github-copilot",
+        "claude-code",
+        "cursor",
+        "codex",
+        "gemini",
+        "antigravity"
+      ]
+    },
+    "__schema13": {
+      "type": "string",
+      "enum": [
+        "project",
+        "user"
+      ]
+    }
+  },
+  "$id": "https://github.com/dyoshikawa/rulesync/releases/latest/download/config-schema.json",
+  "title": "Rulesync Configuration",
+  "description": "Configuration file for Rulesync CLI tool"
+}

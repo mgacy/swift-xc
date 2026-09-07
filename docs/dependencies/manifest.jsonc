@@ -1,0 +1,61 @@
+{
+  // Upstream documentation vendored for agent context. Nothing here is authored
+  // in this repo: every file under a dependency's `path` is a verbatim copy of
+  // the upstream source recorded below, kept under the upstream license.
+  //
+  // Pin `version` to the version this project actually runs. When `pinnedBy`
+  // moves, the docs here are stale and should be re-synced.
+  //
+  // A sync script does not exist yet. When one is written, it needs only this
+  // file: for each entry, check out `repo` at `version`, copy the files under
+  // `docsPath` matching `include` into `path`, then fetch `releaseAssets`.
+  "dependencies": [
+    {
+      "name": "rulesync",
+      "repo": "https://github.com/dyoshikawa/rulesync",
+      "version": "v16.24.1",
+      "commit": "b1d1c6301fcc46385a6dce1ff19b037cc73779cb",
+      "pinnedBy": ".mise.toml [tools] \"npm:rulesync\"",
+      "syncedOn": "2026-09-06",
+      "license": "MIT",
+      "licenseFile": "LICENSE",
+
+      // Upstream `docs/` maps onto `path`, so upstream `docs/reference/file-formats.md`
+      // is `docs/dependencies/rulesync/reference/file-formats.md` here.
+      "docsPath": "docs",
+      "path": "docs/dependencies/rulesync",
+      "include": ["**/*.md"],
+
+      // `.vitepress/config.ts` and `public/logo.jpg` are site scaffolding, not
+      // documentation, and are deliberately excluded.
+      "exclude": [".vitepress/**", "public/**"],
+
+      // Published as release assets, not present in the git tree or the npm
+      // package. Upstream's SHA256SUMS covers only the binaries, so these
+      // digests were computed at sync time and are here to diff against later.
+      "releaseAssets": [
+        {
+          "asset": "config-schema.json",
+          "path": "schemas/config-schema.json",
+          "sha256": "c2cb72dbb79d61fb592d330ee1cd25c6bd942d72cacfe67e28f1351c5bc5114a"
+        },
+        {
+          "asset": "permissions-schema.json",
+          "path": "schemas/permissions-schema.json",
+          "sha256": "128b6f40e1ca001d36913f854cba6d7c4735d386e9f617d1d2f4cc43158cb211"
+        },
+        {
+          "asset": "mcp-schema.json",
+          "path": "schemas/mcp-schema.json",
+          "sha256": "850fa6c4e603b4e2a3572839e2e14a38dd8382da46cf9345dfc6fb404fdb064f"
+        }
+      ],
+
+      "notes": [
+        "reference/file-formats.md specifies .rulesync/*.jsonc, including hooks.jsonc.",
+        "There is no published schema for hooks.jsonc; file-formats.md is the only spec for it.",
+        "The npm package ships \"files\": [\"dist\"] -- no docs and no schemas -- so none of this is available locally via mise."
+      ]
+    }
+  ]
+}
