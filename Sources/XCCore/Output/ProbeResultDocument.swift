@@ -10,7 +10,7 @@ import Foundation
 
 public enum ProbeResultDocument {
     // swiftlint:disable:next type_name
-    public struct V1: Codable, Sendable {
+    public struct V1: Codable, Equatable, Sendable {
         public let schemaVersion: Int
         public let toolVersion: String
         public let outcome: RunOutcome
@@ -27,7 +27,7 @@ public enum ProbeResultDocument {
         }
     }
 
-    public struct Run: Codable, Sendable {
+    public struct Run: Codable, Equatable, Sendable {
         public let id: String
         public let startedAt: Date
         public let durationMS: Double
@@ -39,7 +39,7 @@ public enum ProbeResultDocument {
         }
     }
 
-    public struct Workspace: Codable, Sendable {
+    public struct Workspace: Codable, Equatable, Sendable {
         public let id: String
         public let worktreeRoot: String
         public let repositoryRoot: String?
@@ -52,17 +52,17 @@ public enum ProbeResultDocument {
         }
     }
 
-    public struct Artifacts: Codable, Sendable {
+    public struct Artifacts: Codable, Equatable, Sendable {
         public let result: String?
         public let retained: Bool
         public let write: Operation?
     }
 
-    public struct Storage: Codable, Sendable {
+    public struct Storage: Codable, Equatable, Sendable {
         public let locations: [Location]
     }
 
-    public struct Location: Codable, Sendable {
+    public struct Location: Codable, Equatable, Sendable {
         public let role: String
         public let path: String?
         public let completed: Bool
@@ -70,7 +70,7 @@ public enum ProbeResultDocument {
         public let operations: [Operation]
     }
 
-    public struct Operation: Codable, Sendable {
+    public struct Operation: Codable, Equatable, Sendable {
         public let kind: String
         public let path: String?
         public let succeeded: Bool
@@ -85,7 +85,7 @@ public enum ProbeResultDocument {
         }
     }
 
-    public struct Failure: Codable, Sendable {
+    public struct Failure: Codable, Equatable, Sendable {
         public let message: String
         public let domain: String
         public let code: Int

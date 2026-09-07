@@ -9,7 +9,7 @@
 import CryptoKit
 import Foundation
 
-public struct WorkspaceIdentity: Sendable, Equatable {
+public struct WorkspaceIdentity: Equatable, Sendable {
     public enum Resolution: String, Sendable {
         case gitWorktree
         case gitLinkedWorktree
