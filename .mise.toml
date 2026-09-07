@@ -3,6 +3,7 @@ actionlint = "1.7.12"
 shellcheck = "0.11.0"
 swiftlint = "0.63.1"
 "github:mgacy/Sextant" = "0.3.0"
+"npm:rulesync" = "16.24.1"
 
 [settings]
 experimental = true
@@ -19,8 +20,12 @@ run = "swiftlint --fix"
 description = "Lint GitHub Actions workflows and shell scripts"
 run = [
     "actionlint",
-    "find scripts -name '*.sh' -print0 | xargs -0 shellcheck",
+    "find . -type d \\( -name .build -o -name .git \\) -prune -o -type f -name '*.sh' -print0 | xargs -0 shellcheck",
 ]
+
+[tasks.rulesync]
+description = "Regenerate agent configuration from .rulesync/"
+run = "rulesync generate"
 
 [tasks.build]
 description = "Build release binary"
