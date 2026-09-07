@@ -1,0 +1,9 @@
+file_length:
+  warning: 2000
+  error: 3000
+
+function_body_length: 180
+
+type_body_length:
+  warning: 500
+  error: 1000

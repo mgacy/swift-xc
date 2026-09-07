@@ -1,0 +1,24 @@
+{
+  "originHash" : "60a7fdd7743547c52843d08ae1e73517914b52c92d0d670fe0bd55e57812cd4a",
+  "pins" : [
+    {
+      "identity" : "swift-argument-parser",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-argument-parser",
+      "state" : {
+        "revision" : "6a52f3251125d74daf04fcbd5e6f08a75d074382",
+        "version" : "1.8.2"
+      }
+    },
+    {
+      "identity" : "swift-version-file-plugin",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/mgacy/swift-version-file-plugin.git",
+      "state" : {
+        "revision" : "23349c4f7c66eed19dee3cccd186e131eebc503f",
+        "version" : "0.2.1"
+      }
+    }
+  ],
+  "version" : 3
+}

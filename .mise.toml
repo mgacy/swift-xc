@@ -1,0 +1,31 @@
+[tools]
+actionlint = "1.7.12"
+shellcheck = "0.11.0"
+swiftlint = "0.63.1"
+"github:mgacy/Sextant" = "0.3.0"
+
+[settings]
+experimental = true
+
+[tasks.lint]
+description = "Lint the code"
+run = "swiftlint"
+
+[tasks.lint-fix]
+description = "Auto-fix linting issues"
+run = "swiftlint --fix"
+
+[tasks.lint-ci]
+description = "Lint GitHub Actions workflows and shell scripts"
+run = [
+    "actionlint",
+    "find scripts -name '*.sh' -print0 | xargs -0 shellcheck",
+]
+
+[tasks.build]
+description = "Build release binary"
+run = "swift build -c release"
+
+[tasks.prepare-release]
+description = "Create a version-bump release pull request"
+run = "./scripts/prepare-release.sh"
