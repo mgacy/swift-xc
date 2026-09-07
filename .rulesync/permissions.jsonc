@@ -1,0 +1,15 @@
+{
+  "$schema": "https://github.com/dyoshikawa/rulesync/releases/latest/download/permissions-schema.json",
+  "permission": {
+    // The session-start hook auto-trusts a worktree's mise config, so an edit
+    // to these files is an edit to something that later runs as code.
+    "edit": {
+      ".mise.toml": "ask",
+      ".mise.local.toml": "ask"
+    },
+    "write": {
+      ".mise.toml": "ask",
+      ".mise.local.toml": "ask"
+    }
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".rulesync/hooks/setup-worktree.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".rulesync/hooks/fix-headers.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

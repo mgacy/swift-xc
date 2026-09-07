@@ -1,7 +1,16 @@
-# Project-scoped Codex configuration.
-#
-# Codex loads this file only when the repository is trusted. Keep this file
-# focused on repo behavior; user-specific model/provider settings belong in
-# ~/.codex/config.toml.
+default_permissions = "rulesync"
+approval_policy = "on-request"
+approvals_reviewer = "auto_review"
 
-# project_doc_fallback_filenames = ["CLAUDE.md"]
+[mcp_servers]
+[permissions.rulesync]
+extends = ":workspace"
+
+[permissions.rulesync.filesystem]
+":minimal" = "read"
+glob_scan_max_depth = 8
+
+[permissions.rulesync.filesystem.":workspace_roots"]
+".mise.toml" = "deny"
+".mise.local.toml" = "deny"
+".git/**" = "write"

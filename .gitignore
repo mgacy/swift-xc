@@ -10,7 +10,6 @@ DerivedData/
 
 # User-specific configs
 .claude-tracking
-.claude/rules
 .claude/settings.local.json
 .claude/worktrees
 .env

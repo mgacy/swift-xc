@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "hooks": {
+    // Trust a worktree's mise config when it matches the main checkout, so
+    // mise-managed tools (sextant, swiftlint, ...) work without manual setup.
+    "sessionStart": [
+      {
+        "type": "command",
+        "command": ".rulesync/hooks/setup-worktree.sh",
+        "timeout": 10
+      }
+    ],
+    // Correct Claude-authored Swift file headers against the Xcode template in
+    // .swiftpm/xcode/xcshareddata/IDETemplateMacros.plist once the turn ends.
+    "stop": [
+      {
+        "type": "command",
+        "command": ".rulesync/hooks/fix-headers.sh",
+        "timeout": 10
+      }
+    ]
+  }
+}
