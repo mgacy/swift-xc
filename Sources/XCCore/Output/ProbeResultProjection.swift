@@ -16,8 +16,7 @@ public enum ProbeResultProjection {
     /// - Returns: A V1 document. Retention assumes the pending artifact write succeeds when a path
     ///   exists.
     public static func project(_ report: StorageProbeReport) -> ProbeResultDocument.V1 {
-        let failed = report.locations.contains { $0.operations.contains(where: \.faulted) }
-            || report.artifactWrite?.faulted == true
+        let failed = report.locations.contains { !$0.completed } || report.artifactWrite?.faulted == true
         return ProbeResultDocument.V1(
             schemaVersion: 1,
             toolVersion: report.toolVersion,
@@ -75,18 +74,8 @@ public enum ProbeResultProjection {
     /// - Parameter operation: The completed storage operation.
     /// - Returns: Wire evidence with milliseconds and explicit operation spelling.
     private static func operation(_ operation: ProbeOperation) -> ProbeResultDocument.Operation {
-        let kind: String
-        switch operation.kind {
-        case .resolve: kind = "resolve"
-        case .createDirectory: kind = "create_directory"
-        case .write: kind = "write"
-        case .read: kind = "read"
-        case .verify: kind = "verify"
-        case .removeStub: kind = "remove_stub"
-        case .removeDirectory: kind = "remove_created_directories"
-        }
-        return .init(
-            kind: kind,
+        .init(
+            kind: kind(operation.kind),
             path: operation.path,
             succeeded: operation.succeeded,
             byteCount: operation.byteCount,
@@ -94,6 +83,22 @@ public enum ProbeResultProjection {
             error: operation.failure.map { .init(message: $0.message, domain: $0.domain, code: $0.code) },
             contended: operation.contended ? true : nil
         )
+    }
+
+    /// Returns the V1 spelling for a probe operation kind.
+    ///
+    /// - Parameter kind: The probe operation kind.
+    /// - Returns: The V1 kind spelling.
+    private static func kind(_ kind: ProbeOperation.Kind) -> String {
+        switch kind {
+        case .resolve: "resolve"
+        case .createDirectory: "create_directory"
+        case .write: "write"
+        case .read: "read"
+        case .verify: "verify"
+        case .removeStub: "remove_stub"
+        case .removeDirectory: "remove_created_directories"
+        }
     }
 
     /// Returns the V1 resolution spelling for a workspace identity.

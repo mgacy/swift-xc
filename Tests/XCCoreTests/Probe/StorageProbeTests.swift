@@ -62,12 +62,10 @@ struct StorageProbeTests {
         let blocked = root.appendingPathComponent("a")
         try Data().write(to: blocked)
         var created: [URL] = []
-        do {
-            _ = try probe.createDirectories(target, missing: missing, created: &created)
-            Issue.record("Expected directory creation to fail")
-        } catch {
-            #expect(error.path.path == blocked.path)
+        let failure = #expect(throws: StorageProbe.DirectoryCreationFailure.self) {
+            try probe.createDirectories(target, missing: missing, created: &created)
         }
+        #expect(failure?.path.path == blocked.path)
         #expect(created.isEmpty)
     }
 
@@ -284,14 +282,7 @@ extension StorageProbeTests {
             return StorageProbe(layout: StorageLayout(caches: caches, applicationSupport: support,
                 workspace: workspace, runIdentifier: RunIdentifier()))
         }
-        let reports = await withTaskGroup(of: [LocationProbe].self) { group in
-            for probe in probes {
-                group.addTask { probe.run() }
-            }
-            var all: [[LocationProbe]] = []
-            for await report in group { all.append(report) }
-            return all
-        }
+        let reports = await runConcurrently(probes)
         #expect(reports.count == 8)
         for report in reports {
             #expect(report.allSatisfy { $0.completed })
@@ -310,30 +301,35 @@ extension StorageProbeTests {
         // resolve .build/xc-probe and .deriveddata to the same path, where one run's sweep can
         // remove a directory the other is probing; that case needs a lock rather than tolerance,
         // so this test isolates the shared tool-storage paths instead.
-        try FileManager.default.createDirectory(
-            at: StorageRole.worktreeBuild.directory(root: workspace.worktreeRoot, workspaceID: workspace.id, runIdentifier: RunIdentifier()),
-            withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(
-            at: StorageRole.worktreeDerivedData.directory(root: workspace.worktreeRoot, workspaceID: workspace.id, runIdentifier: RunIdentifier()),
-            withIntermediateDirectories: true)
+        for role in StorageRole.allCases where role.removesCreatedDirectories {
+            let directory = role.directory(root: workspace.worktreeRoot, workspaceID: workspace.id,
+                                           runIdentifier: RunIdentifier())
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        }
         let probes = (0..<8).map { _ in
             StorageProbe(layout: StorageLayout(caches: caches, applicationSupport: support,
                 workspace: workspace, runIdentifier: RunIdentifier()))
         }
-        let reports = await withTaskGroup(of: [LocationProbe].self) { group in
-            for probe in probes {
-                group.addTask { probe.run() }
-            }
-            var all: [[LocationProbe]] = []
-            for await report in group { all.append(report) }
-            return all
-        }
+        let reports = await runConcurrently(probes)
         #expect(reports.count == 8)
         for report in reports {
             let catalog = try #require(report.first { $0.role == .userCacheCatalog })
             let locks = try #require(report.first { $0.role == .userCacheLocks })
             #expect(catalog.completed && catalog.operations.allSatisfy { $0.succeeded })
             #expect(locks.completed && locks.operations.allSatisfy { $0.succeeded })
+        }
+    }
+
+    /// - Parameter probes: The probes to run at the same time.
+    /// - Returns: Each probe's evidence, in completion order.
+    private func runConcurrently(_ probes: [StorageProbe]) async -> [[LocationProbe]] {
+        await withTaskGroup(of: [LocationProbe].self) { group in
+            for probe in probes {
+                group.addTask { probe.run() }
+            }
+            var reports: [[LocationProbe]] = []
+            for await report in group { reports.append(report) }
+            return reports
         }
     }
 }

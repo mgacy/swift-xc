@@ -63,12 +63,7 @@ struct StorageTests {
         let root = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         let bare = root.appendingPathComponent("repo.git")
-        let metadata = bare.appendingPathComponent("worktrees/wt")
-        let worktree = root.appendingPathComponent("wt")
-        try FileManager.default.createDirectory(at: metadata, withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(at: worktree, withIntermediateDirectories: true)
-        try Data("../..\n".utf8).write(to: metadata.appendingPathComponent("commondir"))
-        try Data("gitdir: \(metadata.path)\n".utf8).write(to: worktree.appendingPathComponent(".git"))
+        let worktree = try linkedWorktree(common: bare, in: root, commondir: "../..\n")
         let identity = try WorkspaceResolver.resolve(workingDirectory: worktree)
         #expect(identity.resolution == .gitBareLinkedWorktree)
         #expect(identity.repositoryRoot?.path == bare.path)
@@ -79,14 +74,8 @@ struct StorageTests {
     func bareDirectoryLayout() throws {
         let root = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
-        let proj = root.appendingPathComponent("proj")
-        let bare = proj.appendingPathComponent(".bare")
-        let metadata = bare.appendingPathComponent("worktrees/wt")
-        let worktree = root.appendingPathComponent("wt")
-        try FileManager.default.createDirectory(at: metadata, withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(at: worktree, withIntermediateDirectories: true)
-        try Data("../..\n".utf8).write(to: metadata.appendingPathComponent("commondir"))
-        try Data("gitdir: \(metadata.path)\n".utf8).write(to: worktree.appendingPathComponent(".git"))
+        let bare = root.appendingPathComponent("proj/.bare")
+        let worktree = try linkedWorktree(common: bare, in: root, commondir: "../..\n")
         let identity = try WorkspaceResolver.resolve(workingDirectory: worktree)
         #expect(identity.resolution == .gitBareLinkedWorktree)
         #expect(identity.repositoryRoot?.path == bare.path)
@@ -125,12 +114,7 @@ struct StorageTests {
         let root = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         let common = root.appendingPathComponent("main/\(name)")
-        let metadata = common.appendingPathComponent("worktrees/wt")
-        let worktree = root.appendingPathComponent("wt")
-        try FileManager.default.createDirectory(at: metadata, withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(at: worktree, withIntermediateDirectories: true)
-        try Data(config.utf8).write(to: common.appendingPathComponent("config"))
-        try Data("gitdir: \(metadata.path)\n".utf8).write(to: worktree.appendingPathComponent(".git"))
+        let worktree = try linkedWorktree(common: common, in: root, config: config)
         let identity = try WorkspaceResolver.resolve(workingDirectory: worktree)
         #expect(identity.resolution == expected)
     }
@@ -141,14 +125,9 @@ struct StorageTests {
         defer { try? FileManager.default.removeItem(at: root) }
         let common = root.appendingPathComponent("sepdir")
         let main = root.appendingPathComponent("checkout")
-        let metadata = common.appendingPathComponent("worktrees/wt")
-        let worktree = root.appendingPathComponent("wt")
-        try FileManager.default.createDirectory(at: metadata, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: main, withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(at: worktree, withIntermediateDirectories: true)
-        try Data("[core]\n\tbare = false\n\tworktree = \(main.path)\n".utf8)
-            .write(to: common.appendingPathComponent("config"))
-        try Data("gitdir: \(metadata.path)\n".utf8).write(to: worktree.appendingPathComponent(".git"))
+        let worktree = try linkedWorktree(common: common, in: root,
+                                          config: "[core]\n\tbare = false\n\tworktree = \(main.path)\n")
         let identity = try WorkspaceResolver.resolve(workingDirectory: worktree)
         #expect(identity.resolution == .gitLinkedWorktree)
         #expect(identity.repositoryRoot?.path == main.path)
@@ -160,12 +139,7 @@ struct StorageTests {
         let root = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         let common = root.appendingPathComponent("sepdir")
-        let metadata = common.appendingPathComponent("worktrees/wt")
-        let worktree = root.appendingPathComponent("wt")
-        try FileManager.default.createDirectory(at: metadata, withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(at: worktree, withIntermediateDirectories: true)
-        try Data("[core]\n\tbare = false\n".utf8).write(to: common.appendingPathComponent("config"))
-        try Data("gitdir: \(metadata.path)\n".utf8).write(to: worktree.appendingPathComponent(".git"))
+        let worktree = try linkedWorktree(common: common, in: root, config: "[core]\n\tbare = false\n")
         let identity = try WorkspaceResolver.resolve(workingDirectory: worktree)
         #expect(identity.resolution == .gitLinkedWorktree)
         #expect(identity.repositoryRoot?.path == common.path)
@@ -178,15 +152,10 @@ struct StorageTests {
         let root = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         let common = root.appendingPathComponent("repo.git")
-        let metadata = common.appendingPathComponent("worktrees/wt")
-        let worktree = root.appendingPathComponent("wt")
-        try FileManager.default.createDirectory(at: metadata, withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(at: worktree, withIntermediateDirectories: true)
+        let worktree = try linkedWorktree(common: common, in: root, config: "[core]\n\tbare = true\n")
         let config = common.appendingPathComponent("config")
-        try Data("[core]\n\tbare = true\n".utf8).write(to: config)
         try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: config.path)
         defer { try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: config.path) }
-        try Data("gitdir: \(metadata.path)\n".utf8).write(to: worktree.appendingPathComponent(".git"))
         #expect(throws: WorkspaceResolutionError.self) { try WorkspaceResolver.resolve(workingDirectory: worktree) }
     }
 
@@ -195,13 +164,8 @@ struct StorageTests {
         let root = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         let common = root.appendingPathComponent("sepdir")
-        let metadata = common.appendingPathComponent("worktrees/wt")
-        let worktree = root.appendingPathComponent("wt")
-        try FileManager.default.createDirectory(at: metadata, withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(at: worktree, withIntermediateDirectories: true)
-        try Data("[core]\n\tbare = false\n\tworktree = \(root.path)/moved\n".utf8)
-            .write(to: common.appendingPathComponent("config"))
-        try Data("gitdir: \(metadata.path)\n".utf8).write(to: worktree.appendingPathComponent(".git"))
+        let worktree = try linkedWorktree(common: common, in: root,
+                                          config: "[core]\n\tbare = false\n\tworktree = \(root.path)/moved\n")
         #expect(throws: WorkspaceResolutionError.self) { try WorkspaceResolver.resolve(workingDirectory: worktree) }
     }
 
@@ -210,15 +174,10 @@ struct StorageTests {
         let root = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         let common = root.appendingPathComponent("sepdir")
-        let metadata = common.appendingPathComponent("worktrees/wt")
-        let worktree = root.appendingPathComponent("wt")
         let main = root.appendingPathComponent("a\tb")
-        try FileManager.default.createDirectory(at: metadata, withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(at: worktree, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: main, withIntermediateDirectories: true)
-        try Data("[core]\n\tbare = false\n\tworktree = \"\(root.path)/a\\tb\"\n".utf8)
-            .write(to: common.appendingPathComponent("config"))
-        try Data("gitdir: \(metadata.path)\n".utf8).write(to: worktree.appendingPathComponent(".git"))
+        let worktree = try linkedWorktree(common: common, in: root,
+                                          config: "[core]\n\tbare = false\n\tworktree = \"\(root.path)/a\\tb\"\n")
         let identity = try WorkspaceResolver.resolve(workingDirectory: worktree)
         #expect(identity.repositoryRoot?.path == main.path)
     }
@@ -227,12 +186,8 @@ struct StorageTests {
     func malformedCommonDirectory(_ content: String) throws {
         let root = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
-        let metadata = root.appendingPathComponent("repo.git/worktrees/wt")
-        let worktree = root.appendingPathComponent("wt")
-        try FileManager.default.createDirectory(at: metadata, withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(at: worktree, withIntermediateDirectories: true)
-        try Data(content.utf8).write(to: metadata.appendingPathComponent("commondir"))
-        try Data("gitdir: \(metadata.path)\n".utf8).write(to: worktree.appendingPathComponent(".git"))
+        let common = root.appendingPathComponent("repo.git")
+        let worktree = try linkedWorktree(common: common, in: root, commondir: content)
         #expect(throws: WorkspaceResolutionError.self) { try WorkspaceResolver.resolve(workingDirectory: worktree) }
     }
 
@@ -394,6 +349,31 @@ struct StorageTests {
         #expect(identity.id == aliased.id)
         let digest = SHA256.hash(data: Data("\n\(target.path)".utf8)).prefix(6).map { String(format: "%02x", $0) }.joined()
         #expect(identity.id == "project-" + digest)
+    }
+
+    /// Writes a linked worktree whose `.git` pointer names `<common>/worktrees/wt`.
+    ///
+    /// - Parameters:
+    ///   - common: The common directory to hold the worktree's metadata.
+    ///   - root: The directory to create the worktree in.
+    ///   - commondir: A `commondir` record to write, or nil to leave the layout to speak for itself.
+    ///   - config: A repository configuration to write, or nil to record no topology.
+    /// - Returns: The worktree directory.
+    /// - Throws: A Foundation error if the fixture cannot be written.
+    private func linkedWorktree(
+        common: URL,
+        in root: URL,
+        commondir: String? = nil,
+        config: String? = nil
+    ) throws -> URL {
+        let metadata = common.appendingPathComponent("worktrees/wt")
+        let worktree = root.appendingPathComponent("wt")
+        try FileManager.default.createDirectory(at: metadata, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: worktree, withIntermediateDirectories: true)
+        if let commondir { try Data(commondir.utf8).write(to: metadata.appendingPathComponent("commondir")) }
+        if let config { try Data(config.utf8).write(to: common.appendingPathComponent("config")) }
+        try Data("gitdir: \(metadata.path)\n".utf8).write(to: worktree.appendingPathComponent(".git"))
+        return worktree
     }
 
     /// - Returns: A new empty directory owned by the test.

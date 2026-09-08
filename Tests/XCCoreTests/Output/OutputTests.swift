@@ -10,6 +10,12 @@ import Foundation
 import Testing
 @testable import XCCore
 
+/// A Cocoa permission failure for operation fixtures.
+private let permissionDenied = OperationFailure(NSError(
+    domain: NSCocoaErrorDomain, code: 513,
+    userInfo: [NSLocalizedDescriptionKey: "Permission denied."]
+))
+
 @Suite("Output")
 struct OutputTests {
     @Test("Only reachable outcomes map to process status", arguments: [
@@ -26,13 +32,13 @@ struct OutputTests {
         ProbeOperation.Kind.resolve, .createDirectory, .write, .read, .verify, .removeStub, .removeDirectory
     ])
     func operationFailure(kind: ProbeOperation.Kind) {
-        let document = ProbeResultProjection.project(report(operations: [operation(kind: kind, succeeded: false)]))
+        let document = ProbeResultProjection.project(report(operations: [operation(kind: kind, outcome: .failed(permissionDenied))]))
         #expect(document.outcome == .infrastructureError)
     }
 
     @Test("Successful storage evidence passes and preserves byte counts")
     func success() {
-        let document = ProbeResultProjection.project(report(operations: [operation(kind: .write, succeeded: true)]))
+        let document = ProbeResultProjection.project(report(operations: [operation(kind: .write, outcome: .satisfied)]))
         #expect(document.outcome == .passed)
         #expect(document.artifacts?.retained == true)
         #expect(document.storage?.locations.first?.operations.first?.byteCount == 32)
@@ -41,7 +47,7 @@ struct OutputTests {
     @Test("A contended operation projects contended: true and stays passed")
     func contended() throws {
         let document = ProbeResultProjection.project(report(operations: [
-            operation(kind: .createDirectory, succeeded: true, contended: true)
+            operation(kind: .createDirectory, outcome: .satisfied, contended: true)
         ]))
         #expect(document.outcome == .passed)
         #expect(document.storage?.locations.first?.operations.first?.contended == true)
@@ -52,7 +58,7 @@ struct OutputTests {
     @Test("A refused cleanup removal records an unmet postcondition without failing the run")
     func refusedRemoval() {
         let document = ProbeResultProjection.project(report(operations: [
-            operation(kind: .removeDirectory, succeeded: false, contended: true, attributesFailure: false)
+            operation(kind: .removeDirectory, outcome: .declined, contended: true)
         ]))
         #expect(document.outcome == .passed)
         let projected = document.storage?.locations.first?.operations.first
@@ -80,26 +86,15 @@ struct OutputTests {
 
     @Test("An uncontended operation omits the contended key entirely")
     func uncontended() throws {
-        let document = ProbeResultProjection.project(report(operations: [operation(kind: .write, succeeded: true)]))
+        let document = ProbeResultProjection.project(report(operations: [operation(kind: .write, outcome: .satisfied)]))
         #expect(document.storage?.locations.first?.operations.first?.contended == nil)
         let operations = try encodedOperations(document)
         #expect(operations.first?["contended"] == nil)
     }
 
-    /// - Parameter document: The document to encode.
-    /// - Returns: The serialized operations of the document's first storage location.
-    /// - Throws: An encoding or serialization failure, or an issue if the shape does not match.
-    private func encodedOperations(_ document: ProbeResultDocument.V1) throws -> [[String: Any]] {
-        let bytes = try ResultEncoder.encode(document)
-        let object = try #require(JSONSerialization.jsonObject(with: bytes) as? [String: Any])
-        let storage = try #require(object["storage"] as? [String: Any])
-        let locations = try #require(storage["locations"] as? [[String: Any]])
-        return try #require(locations.first?["operations"] as? [[String: Any]])
-    }
-
     @Test("Artifact failure is retained as evidence and clears retention")
     func artifactFailure() {
-        let failed = operation(kind: .write, succeeded: false)
+        let failed = operation(kind: .write, outcome: .failed(permissionDenied))
         let document = ProbeResultProjection.project(report(operations: [], artifactWrite: failed))
         #expect(document.outcome == .infrastructureError)
         #expect(document.artifacts?.retained == false)
@@ -122,7 +117,7 @@ struct OutputTests {
 
     @Test("Unresolved roots never invent workspace or artifact paths")
     func unresolved() {
-        let original = report(operations: [operation(kind: .resolve, succeeded: false)])
+        let original = report(operations: [operation(kind: .resolve, outcome: .failed(permissionDenied))])
         let unresolved = StorageProbeReport(
             runID: original.runID, workspace: nil, toolVersion: original.toolVersion,
             startedAt: original.startedAt, duration: original.duration, locations: original.locations,
@@ -137,7 +132,7 @@ struct OutputTests {
 
     @Test("Projection matches V1 golden bytes and independent schema")
     func golden() throws {
-        let source = report(operations: [operation(kind: .createDirectory, succeeded: false)])
+        let source = report(operations: [operation(kind: .createDirectory, outcome: .failed(permissionDenied))])
         let bytes = try ResultEncoder.encode(ProbeResultProjection.project(source))
         let text = try #require(String(data: bytes, encoding: .utf8))
             .replacingOccurrences(of: source.runID.rawValue, with: "20260907T024233Z-3f91c04a2b6d")
@@ -178,7 +173,7 @@ struct OutputTests {
         (.removeStub, "remove_stub"), (.removeDirectory, "remove_created_directories")
     ])
     func operationSpelling(kind: ProbeOperation.Kind, expected: String) {
-        let document = ProbeResultProjection.project(report(operations: [operation(kind: kind, succeeded: true)]))
+        let document = ProbeResultProjection.project(report(operations: [operation(kind: kind, outcome: .satisfied)]))
         #expect(document.storage?.locations.first?.operations.first?.kind == expected)
     }
 
@@ -199,23 +194,23 @@ struct OutputTests {
         #expect(document.workspace?.repositoryRoot == nil)
     }
 
+    /// - Parameter document: The document to encode.
+    /// - Returns: The serialized operations of the document's first storage location.
+    /// - Throws: An encoding or serialization failure, or an issue if the shape does not match.
+    private func encodedOperations(_ document: ProbeResultDocument.V1) throws -> [[String: Any]] {
+        let bytes = try ResultEncoder.encode(document)
+        let object = try #require(JSONSerialization.jsonObject(with: bytes) as? [String: Any])
+        let storage = try #require(object["storage"] as? [String: Any])
+        let locations = try #require(storage["locations"] as? [[String: Any]])
+        return try #require(locations.first?["operations"] as? [[String: Any]])
+    }
+
     private func operation(
         kind: ProbeOperation.Kind,
-        succeeded: Bool,
-        contended: Bool = false,
-        attributesFailure: Bool? = nil
+        outcome: ProbeOperation.Outcome,
+        contended: Bool = false
     ) -> ProbeOperation {
-        let outcome: ProbeOperation.Outcome = if attributesFailure ?? !succeeded {
-            .failed(OperationFailure(NSError(
-                domain: NSCocoaErrorDomain, code: 513,
-                userInfo: [NSLocalizedDescriptionKey: "Permission denied."]
-            )))
-        } else if succeeded {
-            .satisfied
-        } else {
-            .declined
-        }
-        return ProbeOperation(
+        ProbeOperation(
             kind: kind, path: "/fixture/support/xc/simulator-pools", outcome: outcome,
             byteCount: kind == .write ? 32 : nil, duration: .milliseconds(1), contended: contended
         )

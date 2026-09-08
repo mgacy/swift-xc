@@ -103,7 +103,7 @@ public enum WorkspaceResolver {
     /// - Throws: `WorkspaceResolutionError` if the record is malformed or names no directory.
     private static func commonDirectory(metadata: URL, gitFile: URL) throws(WorkspaceResolutionError) -> URL {
         let record = metadata.appendingPathComponent("commondir")
-        guard try directoryIfPresent(record) != nil else {
+        guard try exists(record) else {
             let worktrees = metadata.deletingLastPathComponent()
             guard worktrees.lastPathComponent == "worktrees" else {
                 throw invalid(gitFile, "Expected a <common>/worktrees/<name> metadata directory.")
@@ -178,7 +178,7 @@ public enum WorkspaceResolver {
         in common: URL
     ) throws(WorkspaceResolutionError) -> (bare: Bool?, worktree: String?) {
         let file = common.appendingPathComponent("config")
-        guard try directoryIfPresent(file) != nil else { return (nil, nil) }
+        guard try exists(file) else { return (nil, nil) }
         let contents: String
         do {
             contents = try String(contentsOf: file, encoding: .utf8)
@@ -284,6 +284,13 @@ public enum WorkspaceResolver {
             if error.domain == NSCocoaErrorDomain, error.code == NSFileReadNoSuchFileError { return nil }
             throw WorkspaceResolutionError(path: url, underlyingError: error)
         }
+    }
+
+    /// - Parameter url: The path to inspect.
+    /// - Returns: Whether an item exists at the path.
+    /// - Throws: `WorkspaceResolutionError` if metadata cannot be read.
+    private static func exists(_ url: URL) throws(WorkspaceResolutionError) -> Bool {
+        try directoryIfPresent(url) != nil
     }
 
     /// - Parameters:

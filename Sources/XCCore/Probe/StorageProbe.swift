@@ -56,19 +56,18 @@ public struct StorageProbe: Sendable {
         let start = ContinuousClock.now
         switch location.resolution {
         case .failure(let error):
-            return LocationProbe(role: location.role, path: nil, preexisting: false,
-                operations: [ProbeOperation(kind: .resolve, path: error.path?.path,
-                    outcome: .failed(OperationFailure(error.underlyingError)), byteCount: nil,
-                    duration: start.duration(to: .now), contended: false)])
+            let resolve = resolveOperation(path: error.path?.path,
+                outcome: .failed(OperationFailure(error.underlyingError)), duration: start.duration(to: .now))
+            return LocationProbe(role: location.role, path: nil, preexisting: false, operations: [resolve])
         case .success(let resolved):
-            var operations = [ProbeOperation(kind: .resolve, path: resolved.root.path, outcome: .satisfied,
-                byteCount: nil, duration: start.duration(to: .now), contended: false)]
+            var operations = [resolveOperation(path: resolved.root.path, outcome: .satisfied,
+                duration: start.duration(to: .now))]
             let preexisting = FileManager.default.fileExists(atPath: resolved.directory.path)
             var created: [URL] = []
             let ready = record(.createDirectory, path: resolved.directory, operations: &operations) {
-                ActionResult(contended: try createDirectories(resolved.directory,
-                                                              missing: missingAncestors(of: resolved.directory),
-                                                              created: &created))
+                let missing = missingAncestors(of: resolved.directory)
+                let contended = try createDirectories(resolved.directory, missing: missing, created: &created)
+                return ActionResult(contended: contended)
             }
             if ready {
                 roundTrip(in: resolved.directory, operations: &operations)
@@ -79,6 +78,15 @@ public struct StorageProbe: Sendable {
             return LocationProbe(role: location.role, path: resolved.directory.path,
                 preexisting: preexisting, operations: operations)
         }
+    }
+
+    /// - Parameters:
+    ///   - path: The resolved root, or the path a resolution failure named.
+    ///   - outcome: What the resolution established.
+    ///   - duration: How long resolution took.
+    /// - Returns: Evidence for a location's resolution.
+    private func resolveOperation(path: String?, outcome: ProbeOperation.Outcome, duration: Duration) -> ProbeOperation {
+        ProbeOperation(kind: .resolve, path: path, outcome: outcome, byteCount: nil, duration: duration, contended: false)
     }
 
     /// Removes owned directories deepest-first and records the result of every attempt without
@@ -154,12 +162,13 @@ public struct StorageProbe: Sendable {
     /// than failed, and is not claimed as owned.
     ///
     /// - Parameters:
-    ///   - directory: The target directory. Created with intermediates when the scan is empty, in
-    ///     which case nothing on that path is claimed as owned; also attributes a failure there.
+    ///   - directory: The target directory, created with intermediates when the scan is empty; no
+    ///     path is then claimed as owned.
     ///   - missing: The scan result, ordered child-before-parent.
     ///   - created: Receives every directory this call created, in parent-before-child order.
     /// - Returns: Whether a competing process created one of the directories first.
-    /// - Throws: The Foundation failure for the first directory that cannot be created.
+    /// - Throws: `DirectoryCreationFailure` naming the first directory that cannot be created, or
+    ///   `directory` itself when the scan was empty.
     internal func createDirectories(
         _ directory: URL,
         missing: [URL],
