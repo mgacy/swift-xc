@@ -73,9 +73,7 @@ public struct RunSession: Sendable {
         guard let failure = writeArtifact(bytes, to: artifactPath) else {
             return Output(bytes: bytes, outcome: document.outcome)
         }
-        let failedReport = StorageProbeReport(runID: report.runID, workspace: report.workspace,
-            toolVersion: report.toolVersion, startedAt: report.startedAt, duration: start.duration(to: .now),
-            locations: report.locations, artifactPath: artifactPath, artifactWrite: failure)
+        let failedReport = StorageProbeReport(report, duration: start.duration(to: .now), artifactWrite: failure)
         let failedDocument = ProbeResultProjection.project(failedReport)
         return Output(bytes: try ResultEncoder.encode(failedDocument), outcome: failedDocument.outcome)
     }

@@ -117,12 +117,8 @@ struct OutputTests {
 
     @Test("Unresolved roots never invent workspace or artifact paths")
     func unresolved() {
-        let original = report(operations: [operation(kind: .resolve, outcome: .failed(permissionDenied))])
-        let unresolved = StorageProbeReport(
-            runID: original.runID, workspace: nil, toolVersion: original.toolVersion,
-            startedAt: original.startedAt, duration: original.duration, locations: original.locations,
-            artifactPath: nil, artifactWrite: nil
-        )
+        let unresolved = report(operations: [operation(kind: .resolve, outcome: .failed(permissionDenied))],
+                                workspace: nil, artifactPath: nil)
         let document = ProbeResultProjection.project(unresolved)
         #expect(document.workspace == nil)
         #expect(document.artifacts?.result == nil)
@@ -183,13 +179,11 @@ struct OutputTests {
         (.packageRoot, "package_root"), (.workingDirectory, "working_directory")
     ])
     func resolutionSpelling(resolution: WorkspaceIdentity.Resolution, expected: String) {
-        let source = report(operations: [])
         let workspace = WorkspaceIdentity(worktreeRoot: URL(fileURLWithPath: "/fixture/project"),
                                           repositoryRoot: nil, resolution: resolution)
-        let report = StorageProbeReport(runID: source.runID, workspace: workspace, toolVersion: source.toolVersion,
-                                        startedAt: source.startedAt, duration: source.duration, locations: [],
-                                        artifactPath: nil, artifactWrite: nil)
-        let document = ProbeResultProjection.project(report)
+        let document = ProbeResultProjection.project(
+            report(operations: [], workspace: workspace, artifactPath: nil)
+        )
         #expect(document.workspace?.resolution == expected)
         #expect(document.workspace?.repositoryRoot == nil)
     }
@@ -216,20 +210,25 @@ struct OutputTests {
         )
     }
 
-    private func report(operations: [ProbeOperation], artifactWrite: ProbeOperation? = nil) -> StorageProbeReport {
+    private func report(
+        operations: [ProbeOperation],
+        artifactWrite: ProbeOperation? = nil,
+        workspace: WorkspaceIdentity? = WorkspaceIdentity(
+            worktreeRoot: URL(fileURLWithPath: "/fixture/project"),
+            repositoryRoot: URL(fileURLWithPath: "/fixture/project"), resolution: .gitWorktree
+        ),
+        artifactPath: URL? = URL(fileURLWithPath: "/fixture/cache/result.json")
+    ) -> StorageProbeReport {
         StorageProbeReport(
             runID: RunIdentifier(),
-            workspace: WorkspaceIdentity(
-                worktreeRoot: URL(fileURLWithPath: "/fixture/project"),
-                repositoryRoot: URL(fileURLWithPath: "/fixture/project"), resolution: .gitWorktree
-            ),
+            workspace: workspace,
             toolVersion: "0.0.1", startedAt: Date(timeIntervalSince1970: 1788748953),
             duration: .milliseconds(12),
             locations: [LocationProbe(
                 role: .applicationSupport, path: "/fixture/support/xc/simulator-pools",
                 preexisting: false, operations: operations
             )],
-            artifactPath: URL(fileURLWithPath: "/fixture/cache/result.json"), artifactWrite: artifactWrite
+            artifactPath: artifactPath, artifactWrite: artifactWrite
         )
     }
 }

@@ -102,3 +102,24 @@ public struct StorageProbeReport: Sendable {
     public let artifactPath: URL?
     public let artifactWrite: ProbeOperation?
 }
+
+extension StorageProbeReport {
+    /// Copies a report, replacing its duration and recording evidence for the artifact write.
+    ///
+    /// - Parameters:
+    ///   - report: The report to copy every other value from.
+    ///   - duration: The run's duration, measured to include the write.
+    ///   - artifactWrite: Evidence for the attempted write.
+    internal init(_ report: StorageProbeReport, duration: Duration, artifactWrite: ProbeOperation) {
+        self.init(
+            runID: report.runID,
+            workspace: report.workspace,
+            toolVersion: report.toolVersion,
+            startedAt: report.startedAt,
+            duration: duration,
+            locations: report.locations,
+            artifactPath: report.artifactPath,
+            artifactWrite: artifactWrite
+        )
+    }
+}

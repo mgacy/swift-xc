@@ -56,8 +56,11 @@ public struct StorageProbe: Sendable {
         let start = ContinuousClock.now
         switch location.resolution {
         case .failure(let error):
-            let resolve = resolveOperation(path: error.path?.path,
-                outcome: .failed(OperationFailure(error.underlyingError)), duration: start.duration(to: .now))
+            let resolve = resolveOperation(
+                path: error.path?.path,
+                outcome: .failed(OperationFailure(error.underlyingError)),
+                duration: start.duration(to: .now)
+            )
             return LocationProbe(role: location.role, path: nil, preexisting: false, operations: [resolve])
         case .success(let resolved):
             var operations = [resolveOperation(path: resolved.root.path, outcome: .satisfied,
@@ -75,8 +78,12 @@ public struct StorageProbe: Sendable {
             if location.role.removesCreatedDirectories {
                 cleanup(created, operations: &operations)
             }
-            return LocationProbe(role: location.role, path: resolved.directory.path,
-                preexisting: preexisting, operations: operations)
+            return LocationProbe(
+                role: location.role,
+                path: resolved.directory.path,
+                preexisting: preexisting,
+                operations: operations
+            )
         }
     }
 
@@ -235,9 +242,16 @@ public struct StorageProbe: Sendable {
         let start = ContinuousClock.now
         do {
             let result = try action()
-            operations.append(ProbeOperation(kind: kind, path: path.path,
-                outcome: result.satisfied ? .satisfied : .declined, byteCount: result.byteCount,
-                duration: start.duration(to: .now), contended: result.contended))
+            operations.append(
+                ProbeOperation(
+                    kind: kind,
+                    path: path.path,
+                    outcome: result.satisfied ? .satisfied : .declined,
+                    byteCount: result.byteCount,
+                    duration: start.duration(to: .now),
+                    contended: result.contended
+                )
+            )
             return result.satisfied
         } catch {
             operations.append(Self.failedOperation(kind, path: path, error: error, duration: start.duration(to: .now)))
@@ -261,8 +275,13 @@ public struct StorageProbe: Sendable {
         duration: Duration
     ) -> ProbeOperation {
         let creation = error as? DirectoryCreationFailure
-        return ProbeOperation(kind: kind, path: (creation?.path ?? path).path,
-            outcome: .failed(OperationFailure(creation?.underlyingError ?? error as NSError)), byteCount: nil,
-            duration: duration, contended: creation?.contended ?? false)
+        return ProbeOperation(
+            kind: kind,
+            path: (creation?.path ?? path).path,
+            outcome: .failed(OperationFailure(creation?.underlyingError ?? error as NSError)),
+            byteCount: nil,
+            duration: duration,
+            contended: creation?.contended ?? false
+        )
     }
 }

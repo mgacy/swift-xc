@@ -91,8 +91,10 @@ public struct StorageLayout: Sendable {
     /// - Returns: A canonical root or the unmodified Foundation failure with no invented path.
     public static func resolveRoot(_ directory: FileManager.SearchPathDirectory) -> Result<URL, StorageResolutionError> {
         do {
-            return .success(try FileManager.default.url(for: directory, in: .userDomainMask,
-                appropriateFor: nil, create: false).resolvingSymlinksInPath())
+            return .success(
+                try FileManager.default.url(for: directory, in: .userDomainMask, appropriateFor: nil, create: false)
+                    .resolvingSymlinksInPath()
+            )
         } catch {
             return .failure(StorageResolutionError(path: nil, underlyingError: error as NSError))
         }
