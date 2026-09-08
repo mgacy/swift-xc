@@ -128,6 +128,26 @@ struct StorageProbeTests {
         #expect(reports.suffix(3).allSatisfy { $0.completed })
     }
 
+    @Test("Contention recorded before a genuine failure is preserved on the failure", .enabled(if: geteuid() != 0))
+    func creationFailureAfterContention() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let probe = StorageProbe(layout: try layout(root))
+        let target = root.appendingPathComponent("a/b/c")
+        let missing = probe.missingAncestors(of: target)
+        let raced = root.appendingPathComponent("a")
+        try FileManager.default.createDirectory(at: raced, withIntermediateDirectories: false)
+        try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: raced.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: raced.path) }
+        var created: [URL] = []
+        let failure = #expect(throws: StorageProbe.DirectoryCreationFailure.self) {
+            try probe.createDirectories(target, missing: missing, created: &created)
+        }
+        #expect(failure?.contended == true)
+        #expect(failure?.path.path == root.appendingPathComponent("a/b").path)
+        #expect(created.isEmpty)
+    }
+
     @Test("Cleanup records a non-empty directory as contention rather than failure, and preserves foreign contents")
     func cleanupFailure() throws {
         let root = try temporaryDirectory()
@@ -141,7 +161,8 @@ struct StorageProbeTests {
         var operations: [ProbeOperation] = []
         StorageProbe(layout: try layout(root)).cleanup([empty, occupied], operations: &operations)
         #expect(operations.map(\.kind) == [.removeDirectory, .removeDirectory])
-        #expect(operations.map(\.succeeded) == [true, true])
+        #expect(operations.map(\.succeeded) == [false, true])
+        #expect(operations.allSatisfy { !$0.faulted })
         #expect(operations[0].contended)
         #expect(operations[0].failure == nil)
         #expect(!operations[1].contended)

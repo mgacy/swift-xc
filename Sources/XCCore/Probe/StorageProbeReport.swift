@@ -21,11 +21,19 @@ public struct ProbeOperation: Sendable, Equatable {
 
     public let kind: Kind
     public let path: String?
+    /// Whether the action's postcondition holds.
     public let succeeded: Bool
     public let byteCount: Int?
     public let duration: Duration
     public let failure: OperationFailure?
+    /// Whether a competing process interfered with the action.
     public let contended: Bool
+
+    /// Whether the operation is evidence of a storage defect.
+    ///
+    /// An unmet postcondition that attributes no failure — a cleanup removal refused because the
+    /// directory is not empty — is recorded rather than treated as a defect in the storage itself.
+    public var faulted: Bool { failure != nil }
 
     public init(
         kind: Kind,

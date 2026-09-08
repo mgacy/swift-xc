@@ -13,13 +13,17 @@ public struct StorageProbe: Sendable {
     internal struct DirectoryCreationFailure: Error {
         let path: URL
         let underlyingError: NSError
+        /// Whether a competing process created one of the earlier directories first.
+        let contended: Bool
     }
 
-    /// Evidence an action contributes beyond having succeeded.
+    /// Evidence an action contributes beyond having been attempted.
     private struct ActionResult {
         /// Bytes transferred, when the action moves data.
         var byteCount: Int?
-        /// Whether a competing process had already satisfied the action's postcondition.
+        /// Whether the action's postcondition holds.
+        var satisfied = true
+        /// Whether a competing process interfered with the action.
         var contended = false
     }
 
@@ -63,7 +67,7 @@ public struct StorageProbe: Sendable {
                 cleanup(created, operations: &operations)
             }
             return LocationProbe(role: location.role, path: resolved.directory.path,
-                completed: operations.allSatisfy(\.succeeded), preexisting: preexisting, operations: operations)
+                completed: operations.allSatisfy { !$0.faulted }, preexisting: preexisting, operations: operations)
         }
     }
 
@@ -75,7 +79,8 @@ public struct StorageProbe: Sendable {
     internal func cleanup(_ created: [URL], operations: inout [ProbeOperation]) {
         for directory in created.reversed() {
             record(.removeDirectory, path: directory, operations: &operations) {
-                ActionResult(contended: try removeEmptyDirectory(directory))
+                let refused = try removeEmptyDirectory(directory)
+                return ActionResult(satisfied: !refused, contended: refused)
             }
         }
     }
@@ -162,7 +167,7 @@ public struct StorageProbe: Sendable {
                 }
             }
         } catch {
-            throw DirectoryCreationFailure(path: attempted, underlyingError: error as NSError)
+            throw DirectoryCreationFailure(path: attempted, underlyingError: error as NSError, contended: contended)
         }
         return contended
     }
@@ -180,7 +185,7 @@ public struct StorageProbe: Sendable {
     /// Removes a directory only when it is empty, including at the instant of removal.
     ///
     /// - Parameter directory: The directory to remove.
-    /// - Returns: Whether removal was refused because a competing process populated the directory.
+    /// - Returns: Whether removal was refused because the directory is not empty.
     /// - Throws: The POSIX failure if removal is refused for any other reason.
     private func removeEmptyDirectory(_ directory: URL) throws(NSError) -> Bool {
         guard directory.path.withCString({ Darwin.rmdir($0) }) == 0 else {
@@ -191,7 +196,7 @@ public struct StorageProbe: Sendable {
         return false
     }
 
-    /// - Returns: Whether the operation succeeded, after appending its evidence.
+    /// - Returns: Whether the operation's postcondition holds, after appending its evidence.
     @discardableResult
     private func record(
         _ kind: ProbeOperation.Kind,
@@ -202,13 +207,15 @@ public struct StorageProbe: Sendable {
         let start = ContinuousClock.now
         do {
             let result = try action()
-            operations.append(ProbeOperation(kind: kind, path: path.path, succeeded: true, byteCount: result.byteCount,
-                duration: start.duration(to: .now), failure: nil, contended: result.contended))
-            return true
+            operations.append(ProbeOperation(kind: kind, path: path.path, succeeded: result.satisfied,
+                byteCount: result.byteCount, duration: start.duration(to: .now), failure: nil,
+                contended: result.contended))
+            return result.satisfied
         } catch {
             let creation = error as? DirectoryCreationFailure
             operations.append(ProbeOperation(kind: kind, path: (creation?.path ?? path).path, succeeded: false, byteCount: nil,
-                duration: start.duration(to: .now), failure: OperationFailure(creation?.underlyingError ?? error as NSError)))
+                duration: start.duration(to: .now), failure: OperationFailure(creation?.underlyingError ?? error as NSError),
+                contended: creation?.contended ?? false))
             return false
         }
     }

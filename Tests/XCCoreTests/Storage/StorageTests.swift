@@ -110,6 +110,66 @@ struct StorageTests {
         #expect(identity.repositoryRoot?.path == common.deletingLastPathComponent().path)
     }
 
+    @Test("Topology comes from the recorded core.bare rather than the common directory's name", arguments: [
+        ("repo.git", "[core]\n\tbare = false\n", WorkspaceIdentity.Resolution.gitLinkedWorktree),
+        ("repo.git", "[core]\n\tbare = true\n", .gitBareLinkedWorktree),
+        ("repo.git", "[core]\n\tbare\n", .gitBareLinkedWorktree),
+        ("repo.git", "[core]\n\tbare = \"false\" ; trailing\n", .gitLinkedWorktree),
+        ("repo.git", "[remote \"origin\"]\n\tbare = true\n", .gitBareLinkedWorktree),
+        (".git", "[remote \"origin\"]\n\tbare = true\n", .gitLinkedWorktree),
+        (".git", "[core]\n\tbare = true\n", .gitBareLinkedWorktree)
+    ])
+    func recordedTopology(_ name: String, _ config: String, _ expected: WorkspaceIdentity.Resolution) throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let common = root.appendingPathComponent("main/\(name)")
+        let metadata = common.appendingPathComponent("worktrees/wt")
+        let worktree = root.appendingPathComponent("wt")
+        try FileManager.default.createDirectory(at: metadata, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: worktree, withIntermediateDirectories: true)
+        try Data(config.utf8).write(to: common.appendingPathComponent("config"))
+        try Data("gitdir: \(metadata.path)\n".utf8).write(to: worktree.appendingPathComponent(".git"))
+        let identity = try WorkspaceResolver.resolve(workingDirectory: worktree)
+        #expect(identity.resolution == expected)
+    }
+
+    @Test("A recorded core.worktree names the repository root of a separate metadata directory")
+    func separateMetadataDirectory() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let common = root.appendingPathComponent("sepdir")
+        let main = root.appendingPathComponent("checkout")
+        let metadata = common.appendingPathComponent("worktrees/wt")
+        let worktree = root.appendingPathComponent("wt")
+        try FileManager.default.createDirectory(at: metadata, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: main, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: worktree, withIntermediateDirectories: true)
+        try Data("[core]\n\tbare = false\n\tworktree = \(main.path)\n".utf8)
+            .write(to: common.appendingPathComponent("config"))
+        try Data("gitdir: \(metadata.path)\n".utf8).write(to: worktree.appendingPathComponent(".git"))
+        let identity = try WorkspaceResolver.resolve(workingDirectory: worktree)
+        #expect(identity.resolution == .gitLinkedWorktree)
+        #expect(identity.repositoryRoot?.path == main.path)
+        #expect(identity.id.hasPrefix("checkout-"))
+    }
+
+    @Test("A separate metadata directory that records no working tree is its own repository root")
+    func unrecordedMetadataDirectory() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let common = root.appendingPathComponent("sepdir")
+        let metadata = common.appendingPathComponent("worktrees/wt")
+        let worktree = root.appendingPathComponent("wt")
+        try FileManager.default.createDirectory(at: metadata, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: worktree, withIntermediateDirectories: true)
+        try Data("[core]\n\tbare = false\n".utf8).write(to: common.appendingPathComponent("config"))
+        try Data("gitdir: \(metadata.path)\n".utf8).write(to: worktree.appendingPathComponent(".git"))
+        let identity = try WorkspaceResolver.resolve(workingDirectory: worktree)
+        #expect(identity.resolution == .gitLinkedWorktree)
+        #expect(identity.repositoryRoot?.path == common.path)
+        #expect(identity.id.hasPrefix("sepdir-"))
+    }
+
     @Test("Malformed commondir records throw typed errors", arguments: ["", "one\ntwo", "/definitely/missing/path"])
     func malformedCommonDirectory(_ content: String) throws {
         let root = try temporaryDirectory()
@@ -204,6 +264,11 @@ struct StorageTests {
             #expect(try location.resolution.get().directory.path == root.appendingPathComponent(suffix).path)
         }
         #expect(try FileManager.default.contentsOfDirectory(atPath: root.path).isEmpty)
+    }
+
+    @Test("Only worktree-local roles sweep the directories they create")
+    func directorySweeping() {
+        #expect(StorageRole.allCases.filter(\.removesCreatedDirectories) == [.worktreeBuild, .worktreeDerivedData])
     }
 
     @Test("Production search roots match Foundation without creating directories")

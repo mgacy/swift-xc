@@ -47,6 +47,18 @@ struct OutputTests {
         #expect(document.storage?.locations.first?.operations.first?.contended == true)
     }
 
+    @Test("A refused cleanup removal records an unmet postcondition without failing the run")
+    func refusedRemoval() {
+        let document = ProbeResultProjection.project(report(operations: [
+            operation(kind: .removeDirectory, succeeded: false, contended: true, attributesFailure: false)
+        ]))
+        #expect(document.outcome == .passed)
+        let projected = document.storage?.locations.first?.operations.first
+        #expect(projected?.succeeded == false)
+        #expect(projected?.contended == true)
+        #expect(projected?.error == nil)
+    }
+
     @Test("An uncontended operation omits the contended key entirely")
     func uncontended() throws {
         let document = ProbeResultProjection.project(report(operations: [operation(kind: .write, succeeded: true)]))
@@ -161,14 +173,19 @@ struct OutputTests {
         #expect(document.workspace?.repositoryRoot == nil)
     }
 
-    private func operation(kind: ProbeOperation.Kind, succeeded: Bool, contended: Bool = false) -> ProbeOperation {
+    private func operation(
+        kind: ProbeOperation.Kind,
+        succeeded: Bool,
+        contended: Bool = false,
+        attributesFailure: Bool? = nil
+    ) -> ProbeOperation {
         ProbeOperation(
             kind: kind, path: "/fixture/support/xc/simulator-pools", succeeded: succeeded,
             byteCount: kind == .write ? 32 : nil, duration: .milliseconds(1),
-            failure: succeeded ? nil : OperationFailure(NSError(
+            failure: (attributesFailure ?? !succeeded) ? OperationFailure(NSError(
                 domain: NSCocoaErrorDomain, code: 513,
                 userInfo: [NSLocalizedDescriptionKey: "Permission denied."]
-            )),
+            )) : nil,
             contended: contended
         )
     }
@@ -184,7 +201,7 @@ struct OutputTests {
             duration: .milliseconds(12),
             locations: [LocationProbe(
                 role: .applicationSupport, path: "/fixture/support/xc/simulator-pools",
-                completed: operations.allSatisfy(\.succeeded), preexisting: false, operations: operations
+                completed: operations.allSatisfy { !$0.faulted }, preexisting: false, operations: operations
             )],
             artifactPath: URL(fileURLWithPath: "/fixture/cache/result.json"), artifactWrite: artifactWrite
         )

@@ -16,8 +16,8 @@ public enum ProbeResultProjection {
     /// - Returns: A V1 document. Retention assumes the pending artifact write succeeds when a path
     ///   exists.
     public static func project(_ report: StorageProbeReport) -> ProbeResultDocument.V1 {
-        let failed = report.locations.contains { $0.operations.contains { !$0.succeeded } }
-            || report.artifactWrite?.succeeded == false
+        let failed = report.locations.contains { $0.operations.contains(where: \.faulted) }
+            || report.artifactWrite?.faulted == true
         return ProbeResultDocument.V1(
             schemaVersion: 1,
             toolVersion: report.toolVersion,
