@@ -128,6 +128,42 @@ struct StorageProbeTests {
         #expect(reports.suffix(3).allSatisfy { $0.completed })
     }
 
+    @Test("A symbolic link at a scanned path is a genuine failure, not swallowed as contention")
+    func creationBlockedBySymbolicLink() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let probe = StorageProbe(layout: try layout(root))
+        let target = root.appendingPathComponent("a/b/c")
+        let missing = probe.missingAncestors(of: target)
+        let elsewhere = root.appendingPathComponent("elsewhere")
+        try FileManager.default.createDirectory(at: elsewhere, withIntermediateDirectories: false)
+        try FileManager.default.createSymbolicLink(at: root.appendingPathComponent("a"), withDestinationURL: elsewhere)
+        var created: [URL] = []
+        let failure = #expect(throws: StorageProbe.DirectoryCreationFailure.self) {
+            try probe.createDirectories(target, missing: missing, created: &created)
+        }
+        #expect(failure?.path.path == root.appendingPathComponent("a").path)
+        #expect(created.isEmpty)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: elsewhere.path).isEmpty)
+    }
+
+    @Test("A failed creation carries the contention it observed into its evidence")
+    func failedOperationCarriesContention() {
+        let failure = StorageProbe.DirectoryCreationFailure(
+            path: URL(fileURLWithPath: "/fixture/a/b"),
+            underlyingError: NSError(domain: NSCocoaErrorDomain, code: 513),
+            contended: true
+        )
+        let operation = StorageProbe.failedOperation(
+            .createDirectory, path: URL(fileURLWithPath: "/fixture/a"), error: failure, duration: .zero
+        )
+        #expect(operation.path == "/fixture/a/b")
+        #expect(!operation.succeeded)
+        #expect(operation.contended)
+        #expect(operation.faulted)
+        #expect(operation.failure?.code == 513)
+    }
+
     @Test("Contention recorded before a genuine failure is preserved on the failure", .enabled(if: geteuid() != 0))
     func creationFailureAfterContention() throws {
         let root = try temporaryDirectory()

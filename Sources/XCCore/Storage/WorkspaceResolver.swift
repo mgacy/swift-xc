@@ -134,7 +134,7 @@ public enum WorkspaceResolver {
             throw invalid(gitFile, "The gitdir: pointer does not name a metadata directory.")
         }
         let common = try commonDirectory(metadata: metadata, gitFile: gitFile)
-        let core = coreConfiguration(in: common)
+        let core = try coreConfiguration(in: common)
         let bare = core.bare ?? (common.lastPathComponent != ".git")
         return WorkspaceIdentity(
             worktreeRoot: worktree,
@@ -161,14 +161,22 @@ public enum WorkspaceResolver {
     /// Reads `core.bare` and `core.worktree` from a repository's configuration.
     ///
     /// Only the `core` section is scanned, and only for those two keys; every other section, key,
-    /// and include directive is ignored. A configuration that cannot be read yields no records, so
-    /// a repository without one still resolves.
+    /// and include directive is ignored, as is a key written on a section header's own line. An
+    /// absent configuration yields no records, so a repository without one still resolves.
     ///
     /// - Parameter common: The common directory holding the configuration.
     /// - Returns: The recorded values, each nil when the key is absent or uninterpretable.
-    private static func coreConfiguration(in common: URL) -> (bare: Bool?, worktree: String?) {
-        guard let contents = try? String(contentsOf: common.appendingPathComponent("config"), encoding: .utf8) else {
-            return (nil, nil)
+    /// - Throws: `WorkspaceResolutionError` if a configuration exists but cannot be read.
+    private static func coreConfiguration(
+        in common: URL
+    ) throws(WorkspaceResolutionError) -> (bare: Bool?, worktree: String?) {
+        let file = common.appendingPathComponent("config")
+        guard try directoryIfPresent(file) != nil else { return (nil, nil) }
+        let contents: String
+        do {
+            contents = try String(contentsOf: file, encoding: .utf8)
+        } catch {
+            throw WorkspaceResolutionError(path: file, underlyingError: error as NSError)
         }
         var core = false
         var bare: Bool?
@@ -194,12 +202,13 @@ public enum WorkspaceResolver {
     }
 
     /// - Parameter value: A configuration value, or nil when the key carries none.
-    /// - Returns: The value read as a boolean, or nil when it names neither.
+    /// - Returns: The value read as a boolean, or nil when it names neither. A key written without
+    ///   a value is true; a key written with an empty one is false.
     private static func booleanRecord(_ value: String?) -> Bool? {
         guard let value else { return true }
         switch unquoted(value).lowercased() {
-        case "", "true", "yes", "on", "1": return true
-        case "false", "no", "off", "0": return false
+        case "true", "yes", "on", "1": return true
+        case "", "false", "no", "off", "0": return false
         default: return nil
         }
     }

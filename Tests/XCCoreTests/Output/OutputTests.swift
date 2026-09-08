@@ -39,12 +39,14 @@ struct OutputTests {
     }
 
     @Test("A contended operation projects contended: true and stays passed")
-    func contended() {
+    func contended() throws {
         let document = ProbeResultProjection.project(report(operations: [
             operation(kind: .createDirectory, succeeded: true, contended: true)
         ]))
         #expect(document.outcome == .passed)
         #expect(document.storage?.locations.first?.operations.first?.contended == true)
+        let operations = try encodedOperations(document)
+        #expect(operations.first?["contended"] as? Bool == true)
     }
 
     @Test("A refused cleanup removal records an unmet postcondition without failing the run")
@@ -63,12 +65,19 @@ struct OutputTests {
     func uncontended() throws {
         let document = ProbeResultProjection.project(report(operations: [operation(kind: .write, succeeded: true)]))
         #expect(document.storage?.locations.first?.operations.first?.contended == nil)
+        let operations = try encodedOperations(document)
+        #expect(operations.first?["contended"] == nil)
+    }
+
+    /// - Parameter document: The document to encode.
+    /// - Returns: The serialized operations of the document's first storage location.
+    /// - Throws: An encoding or serialization failure, or an issue if the shape does not match.
+    private func encodedOperations(_ document: ProbeResultDocument.V1) throws -> [[String: Any]] {
         let bytes = try ResultEncoder.encode(document)
         let object = try #require(JSONSerialization.jsonObject(with: bytes) as? [String: Any])
         let storage = try #require(object["storage"] as? [String: Any])
         let locations = try #require(storage["locations"] as? [[String: Any]])
-        let operations = try #require(locations.first?["operations"] as? [[String: Any]])
-        #expect(operations.first?["contended"] == nil)
+        return try #require(locations.first?["operations"] as? [[String: Any]])
     }
 
     @Test("Artifact failure is retained as evidence and clears retention")

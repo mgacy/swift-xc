@@ -7,6 +7,7 @@
 //
 
 import CryptoKit
+import Darwin
 import Foundation
 import Testing
 @testable import XCCore
@@ -113,7 +114,8 @@ struct StorageTests {
     @Test("Topology comes from the recorded core.bare rather than the common directory's name", arguments: [
         ("repo.git", "[core]\n\tbare = false\n", WorkspaceIdentity.Resolution.gitLinkedWorktree),
         ("repo.git", "[core]\n\tbare = true\n", .gitBareLinkedWorktree),
-        ("repo.git", "[core]\n\tbare\n", .gitBareLinkedWorktree),
+        (".git", "[core]\n\tbare\n", .gitBareLinkedWorktree),
+        ("repo.git", "[core]\n\tbare =\n", .gitLinkedWorktree),
         ("repo.git", "[core]\n\tbare = \"false\" ; trailing\n", .gitLinkedWorktree),
         ("repo.git", "[remote \"origin\"]\n\tbare = true\n", .gitBareLinkedWorktree),
         (".git", "[remote \"origin\"]\n\tbare = true\n", .gitLinkedWorktree),
@@ -168,6 +170,24 @@ struct StorageTests {
         #expect(identity.resolution == .gitLinkedWorktree)
         #expect(identity.repositoryRoot?.path == common.path)
         #expect(identity.id.hasPrefix("sepdir-"))
+    }
+
+    @Test("A configuration that exists but cannot be read is an error, not a silent fallback",
+          .enabled(if: geteuid() != 0))
+    func unreadableConfiguration() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let common = root.appendingPathComponent("repo.git")
+        let metadata = common.appendingPathComponent("worktrees/wt")
+        let worktree = root.appendingPathComponent("wt")
+        try FileManager.default.createDirectory(at: metadata, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: worktree, withIntermediateDirectories: true)
+        let config = common.appendingPathComponent("config")
+        try Data("[core]\n\tbare = true\n".utf8).write(to: config)
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: config.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: config.path) }
+        try Data("gitdir: \(metadata.path)\n".utf8).write(to: worktree.appendingPathComponent(".git"))
+        #expect(throws: WorkspaceResolutionError.self) { try WorkspaceResolver.resolve(workingDirectory: worktree) }
     }
 
     @Test("Malformed commondir records throw typed errors", arguments: ["", "one\ntwo", "/definitely/missing/path"])

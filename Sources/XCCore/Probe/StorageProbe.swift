@@ -175,11 +175,14 @@ public struct StorageProbe: Sendable {
     /// - Parameters:
     ///   - error: The failure raised by directory creation.
     ///   - url: The path that could not be created.
-    /// - Returns: Whether the failure is a collision with a directory rather than with a file.
+    /// - Returns: Whether the failure is a collision with a directory itself, rather than with a
+    ///   file or with a symbolic link. The link is excluded because the probe would otherwise write
+    ///   its evidence through the link while reporting the path it was given.
     private func isExistingDirectory(_ error: NSError, at url: URL) -> Bool {
         guard error.domain == NSCocoaErrorDomain, error.code == NSFileWriteFileExistsError else { return false }
-        var directory: ObjCBool = false
-        return FileManager.default.fileExists(atPath: url.path, isDirectory: &directory) && directory.boolValue
+        var status = stat()
+        guard url.path.withCString({ lstat($0, &status) }) == 0 else { return false }
+        return status.st_mode & S_IFMT == S_IFDIR
     }
 
     /// Removes a directory only when it is empty, including at the instant of removal.
@@ -212,11 +215,29 @@ public struct StorageProbe: Sendable {
                 contended: result.contended))
             return result.satisfied
         } catch {
-            let creation = error as? DirectoryCreationFailure
-            operations.append(ProbeOperation(kind: kind, path: (creation?.path ?? path).path, succeeded: false, byteCount: nil,
-                duration: start.duration(to: .now), failure: OperationFailure(creation?.underlyingError ?? error as NSError),
-                contended: creation?.contended ?? false))
+            operations.append(Self.failedOperation(kind, path: path, error: error, duration: start.duration(to: .now)))
             return false
         }
+    }
+
+    /// Attributes a failed action, preferring the path a directory creation stopped at and keeping
+    /// any contention it observed before stopping.
+    ///
+    /// - Parameters:
+    ///   - kind: The kind of action that failed.
+    ///   - path: The action's nominal path.
+    ///   - error: The failure the action raised.
+    ///   - duration: How long the action ran before failing.
+    /// - Returns: Evidence for the failure.
+    internal static func failedOperation(
+        _ kind: ProbeOperation.Kind,
+        path: URL,
+        error: any Error,
+        duration: Duration
+    ) -> ProbeOperation {
+        let creation = error as? DirectoryCreationFailure
+        return ProbeOperation(kind: kind, path: (creation?.path ?? path).path, succeeded: false, byteCount: nil,
+            duration: duration, failure: OperationFailure(creation?.underlyingError ?? error as NSError),
+            contended: creation?.contended ?? false)
     }
 }
