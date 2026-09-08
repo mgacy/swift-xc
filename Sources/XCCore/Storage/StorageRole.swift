@@ -35,4 +35,16 @@ public enum StorageRole: String, CaseIterable, Sendable {
         }
         return root.appendingPathComponent(suffix, isDirectory: true)
     }
+
+    /// Whether directories created for this role are removed once the probe completes.
+    ///
+    /// Worktree-local roles are swept so a probe leaves the checkout clean. Cache and Application
+    /// Support directories are long-lived tool storage: creating and removing them on every run
+    /// makes concurrent invocations collide on paths they legitimately share.
+    public var removesCreatedDirectories: Bool {
+        switch self {
+        case .worktreeBuild, .worktreeDerivedData: true
+        case .userCacheRun, .userCacheCatalog, .userCacheLocks, .applicationSupport: false
+        }
+    }
 }

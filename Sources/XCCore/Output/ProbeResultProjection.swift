@@ -19,20 +19,35 @@ public enum ProbeResultProjection {
         let failed = report.locations.contains { $0.operations.contains { !$0.succeeded } }
             || report.artifactWrite?.succeeded == false
         return ProbeResultDocument.V1(
-            schemaVersion: 1, toolVersion: report.toolVersion,
-            outcome: failed ? .infrastructureError : .passed, reason: nil,
+            schemaVersion: 1,
+            toolVersion: report.toolVersion,
+            outcome: failed ? .infrastructureError : .passed,
+            reason: nil,
             run: .init(id: report.runID.rawValue, startedAt: report.startedAt, durationMS: milliseconds(report.duration)),
             workspace: report.workspace.map {
-                .init(id: $0.id, worktreeRoot: $0.worktreeRoot.path, repositoryRoot: $0.repositoryRoot?.path,
-                      resolution: resolution($0.resolution))
+                .init(
+                    id: $0.id,
+                    worktreeRoot: $0.worktreeRoot.path,
+                    repositoryRoot: $0.repositoryRoot?.path,
+                    resolution: resolution($0.resolution)
+                )
             },
-            artifacts: .init(result: report.artifactPath?.path,
-                             retained: report.artifactPath != nil && report.artifactWrite?.succeeded != false,
-                             write: report.artifactWrite.map(operation)),
-            storage: .init(locations: report.locations.map {
-                .init(role: $0.role.rawValue, path: $0.path, completed: $0.completed,
-                      preexisting: $0.preexisting, operations: $0.operations.map(operation))
-            })
+            artifacts: .init(
+                result: report.artifactPath?.path,
+                retained: report.artifactPath != nil && report.artifactWrite?.succeeded != false,
+                write: report.artifactWrite.map(operation)
+            ),
+            storage: .init(
+                locations: report.locations.map {
+                    .init(
+                        role: $0.role.rawValue,
+                        path: $0.path,
+                        completed: $0.completed,
+                        preexisting: $0.preexisting,
+                        operations: $0.operations.map(operation)
+                    )
+                }
+            )
         )
     }
 
@@ -43,8 +58,16 @@ public enum ProbeResultProjection {
     ///   - toolVersion: The emitting executable's version.
     /// - Returns: A configuration-error document with no storage operations.
     public static func configurationError(reason: String, toolVersion: String) -> ProbeResultDocument.V1 {
-        .init(schemaVersion: 1, toolVersion: toolVersion, outcome: .configurationError, reason: reason,
-              run: nil, workspace: nil, artifacts: nil, storage: nil)
+        .init(
+            schemaVersion: 1,
+            toolVersion: toolVersion,
+            outcome: .configurationError,
+            reason: reason,
+            run: nil,
+            workspace: nil,
+            artifacts: nil,
+            storage: nil
+        )
     }
 
     /// Projects a completed storage operation.
@@ -62,9 +85,15 @@ public enum ProbeResultProjection {
         case .removeStub: kind = "remove_stub"
         case .removeDirectory: kind = "remove_created_directories"
         }
-        return .init(kind: kind, path: operation.path, succeeded: operation.succeeded,
-                     byteCount: operation.byteCount, durationMS: milliseconds(operation.duration),
-                     error: operation.failure.map { .init(message: $0.message, domain: $0.domain, code: $0.code) })
+        return .init(
+            kind: kind,
+            path: operation.path,
+            succeeded: operation.succeeded,
+            byteCount: operation.byteCount,
+            durationMS: milliseconds(operation.duration),
+            error: operation.failure.map { .init(message: $0.message, domain: $0.domain, code: $0.code) },
+            contended: operation.contended ? true : nil
+        )
     }
 
     /// Returns the V1 resolution spelling for a workspace identity.
@@ -75,6 +104,7 @@ public enum ProbeResultProjection {
         switch resolution {
         case .gitWorktree: "git_worktree"
         case .gitLinkedWorktree: "git_linked_worktree"
+        case .gitBareLinkedWorktree: "git_bare_linked_worktree"
         case .packageRoot: "package_root"
         case .workingDirectory: "working_directory"
         }

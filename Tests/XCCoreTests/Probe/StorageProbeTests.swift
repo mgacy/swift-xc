@@ -13,7 +13,7 @@ import Testing
 
 @Suite("Probe")
 struct StorageProbeTests {
-    @Test("Round trips 32 bytes at every location and removes disposable directories")
+    @Test("Round trips 32 bytes at every location, retaining long-lived tool storage and removing disposable directories")
     func roundTrip() throws {
         let root = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
@@ -27,12 +27,48 @@ struct StorageProbeTests {
             #expect(report.operations.allSatisfy { $0.succeeded && $0.duration >= .zero })
             #expect(report.operations.filter { [.write, .read, .verify].contains($0.kind) }.map(\.byteCount) == [32, 32, 32])
             let path = try #require(report.path)
-            #expect(FileManager.default.fileExists(atPath: path) == (report.role == .userCacheRun))
+            #expect(FileManager.default.fileExists(atPath: path) == !report.role.removesCreatedDirectories)
         }
         let run = try layout.locations[0].resolution.get().directory
         #expect(try FileManager.default.contentsOfDirectory(atPath: run.path).isEmpty)
-        #expect(!FileManager.default.fileExists(atPath: root.appendingPathComponent("support").path))
+        #expect(FileManager.default.fileExists(atPath: root.appendingPathComponent("support").path))
         #expect(!FileManager.default.fileExists(atPath: root.appendingPathComponent(".build").path))
+    }
+
+    @Test("A directory created between the scan and the attempt is treated as satisfied, not owned")
+    func creationCollision() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let probe = StorageProbe(layout: try layout(root))
+        let target = root.appendingPathComponent("a/b/c")
+        let missing = probe.missingAncestors(of: target)
+        let raced = root.appendingPathComponent("a")
+        try FileManager.default.createDirectory(at: raced, withIntermediateDirectories: false)
+        var created: [URL] = []
+        let contended = try probe.createDirectories(target, missing: missing, created: &created)
+        #expect(contended)
+        #expect(!created.map(\.path).contains(raced.path))
+        #expect(created.map(\.path) == [root.appendingPathComponent("a/b").path, target.path])
+        #expect(FileManager.default.fileExists(atPath: target.path))
+    }
+
+    @Test("A file blocking a scanned path is still a genuine failure, not swallowed as contention")
+    func creationBlockedByFile() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let probe = StorageProbe(layout: try layout(root))
+        let target = root.appendingPathComponent("a/b/c")
+        let missing = probe.missingAncestors(of: target)
+        let blocked = root.appendingPathComponent("a")
+        try Data().write(to: blocked)
+        var created: [URL] = []
+        do {
+            _ = try probe.createDirectories(target, missing: missing, created: &created)
+            Issue.record("Expected directory creation to fail")
+        } catch {
+            #expect(error.path.path == blocked.path)
+        }
+        #expect(created.isEmpty)
     }
 
     @Test("Preserves preexisting directories and their files")
@@ -92,7 +128,7 @@ struct StorageProbeTests {
         #expect(reports.suffix(3).allSatisfy { $0.completed })
     }
 
-    @Test("Cleanup preserves foreign contents and continues after a refused removal")
+    @Test("Cleanup records a non-empty directory as contention rather than failure, and preserves foreign contents")
     func cleanupFailure() throws {
         let root = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
@@ -105,9 +141,11 @@ struct StorageProbeTests {
         var operations: [ProbeOperation] = []
         StorageProbe(layout: try layout(root)).cleanup([empty, occupied], operations: &operations)
         #expect(operations.map(\.kind) == [.removeDirectory, .removeDirectory])
-        #expect(operations.map(\.succeeded) == [false, true])
-        #expect(operations[0].failure?.domain == NSPOSIXErrorDomain)
-        #expect(operations[0].failure?.code == Int(ENOTEMPTY))
+        #expect(operations.map(\.succeeded) == [true, true])
+        #expect(operations[0].contended)
+        #expect(operations[0].failure == nil)
+        #expect(!operations[1].contended)
+        #expect(FileManager.default.fileExists(atPath: occupied.path))
         #expect(try Data(contentsOf: foreign) == Data([4, 5]))
         #expect(!FileManager.default.fileExists(atPath: empty.path))
     }
@@ -143,5 +181,74 @@ struct StorageProbeTests {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).resolvingSymlinksInPath()
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         return root
+    }
+}
+
+// MARK: - Concurrency
+
+extension StorageProbeTests {
+    @Test("Concurrent runs from distinct worktrees never fail on a cold, shared cache and Application Support root")
+    func crossWorktreeConcurrency() async throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let caches = root.appendingPathComponent("caches")
+        let support = root.appendingPathComponent("support")
+        let probes = try (0..<8).map { index -> StorageProbe in
+            let worktree = root.appendingPathComponent("worktree-\(index)")
+            try FileManager.default.createDirectory(at: worktree, withIntermediateDirectories: true)
+            let workspace = try WorkspaceResolver.resolve(workingDirectory: worktree)
+            return StorageProbe(layout: StorageLayout(caches: caches, applicationSupport: support,
+                workspace: workspace, runIdentifier: RunIdentifier()))
+        }
+        let reports = await withTaskGroup(of: [LocationProbe].self) { group in
+            for probe in probes {
+                group.addTask { probe.run() }
+            }
+            var all: [[LocationProbe]] = []
+            for await report in group { all.append(report) }
+            return all
+        }
+        #expect(reports.count == 8)
+        for report in reports {
+            #expect(report.allSatisfy { $0.completed })
+            #expect(report.flatMap(\.operations).allSatisfy { $0.succeeded })
+        }
+    }
+
+    @Test("Concurrent runs in one worktree never fail on cold, shared user-cache paths")
+    func sameWorktreeToolStorageConcurrency() async throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let workspace = try WorkspaceResolver.resolve(workingDirectory: root)
+        let caches = root.appendingPathComponent("caches")
+        let support = root.appendingPathComponent("support")
+        // Pre-create the worktree-local roles so neither run owns them: same-worktree concurrency
+        // for these two roles is an excluded guarantee (see "The same-worktree limit"), and this
+        // test isolates the shared tool-storage paths instead.
+        try FileManager.default.createDirectory(
+            at: StorageRole.worktreeBuild.directory(root: workspace.worktreeRoot, workspaceID: workspace.id, runIdentifier: RunIdentifier()),
+            withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(
+            at: StorageRole.worktreeDerivedData.directory(root: workspace.worktreeRoot, workspaceID: workspace.id, runIdentifier: RunIdentifier()),
+            withIntermediateDirectories: true)
+        let probes = (0..<8).map { _ in
+            StorageProbe(layout: StorageLayout(caches: caches, applicationSupport: support,
+                workspace: workspace, runIdentifier: RunIdentifier()))
+        }
+        let reports = await withTaskGroup(of: [LocationProbe].self) { group in
+            for probe in probes {
+                group.addTask { probe.run() }
+            }
+            var all: [[LocationProbe]] = []
+            for await report in group { all.append(report) }
+            return all
+        }
+        #expect(reports.count == 8)
+        for report in reports {
+            let catalog = try #require(report.first { $0.role == .userCacheCatalog })
+            let locks = try #require(report.first { $0.role == .userCacheLocks })
+            #expect(catalog.completed && catalog.operations.allSatisfy { $0.succeeded })
+            #expect(locks.completed && locks.operations.allSatisfy { $0.succeeded })
+        }
     }
 }

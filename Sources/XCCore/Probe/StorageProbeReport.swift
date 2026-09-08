@@ -25,6 +25,25 @@ public struct ProbeOperation: Sendable, Equatable {
     public let byteCount: Int?
     public let duration: Duration
     public let failure: OperationFailure?
+    public let contended: Bool
+
+    public init(
+        kind: Kind,
+        path: String?,
+        succeeded: Bool,
+        byteCount: Int?,
+        duration: Duration,
+        failure: OperationFailure?,
+        contended: Bool = false
+    ) {
+        self.kind = kind
+        self.path = path
+        self.succeeded = succeeded
+        self.byteCount = byteCount
+        self.duration = duration
+        self.failure = failure
+        self.contended = contended
+    }
 }
 
 /// Error evidence without an inferred cause.

@@ -101,8 +101,14 @@ public struct RunSession: Sendable {
             try bytes.write(to: path, options: .atomic)
             return nil
         } catch {
-            return ProbeOperation(kind: .write, path: path.path, succeeded: false, byteCount: nil,
-                duration: start.duration(to: .now), failure: OperationFailure(error as NSError))
+            return ProbeOperation(
+                kind: .write,
+                path: path.path,
+                succeeded: false,
+                byteCount: nil,
+                duration: start.duration(to: .now),
+                failure: OperationFailure(error as NSError)
+            )
         }
     }
 }

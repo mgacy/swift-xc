@@ -38,6 +38,27 @@ struct OutputTests {
         #expect(document.storage?.locations.first?.operations.first?.byteCount == 32)
     }
 
+    @Test("A contended operation projects contended: true and stays passed")
+    func contended() {
+        let document = ProbeResultProjection.project(report(operations: [
+            operation(kind: .createDirectory, succeeded: true, contended: true)
+        ]))
+        #expect(document.outcome == .passed)
+        #expect(document.storage?.locations.first?.operations.first?.contended == true)
+    }
+
+    @Test("An uncontended operation omits the contended key entirely")
+    func uncontended() throws {
+        let document = ProbeResultProjection.project(report(operations: [operation(kind: .write, succeeded: true)]))
+        #expect(document.storage?.locations.first?.operations.first?.contended == nil)
+        let bytes = try ResultEncoder.encode(document)
+        let object = try #require(JSONSerialization.jsonObject(with: bytes) as? [String: Any])
+        let storage = try #require(object["storage"] as? [String: Any])
+        let locations = try #require(storage["locations"] as? [[String: Any]])
+        let operations = try #require(locations.first?["operations"] as? [[String: Any]])
+        #expect(operations.first?["contended"] == nil)
+    }
+
     @Test("Artifact failure is retained as evidence and clears retention")
     func artifactFailure() {
         let failed = operation(kind: .write, succeeded: false)
@@ -125,8 +146,8 @@ struct OutputTests {
 
     @Test("Workspace resolution uses V1 spelling", arguments: [
         (WorkspaceIdentity.Resolution.gitWorktree, "git_worktree"),
-        (.gitLinkedWorktree, "git_linked_worktree"), (.packageRoot, "package_root"),
-        (.workingDirectory, "working_directory")
+        (.gitLinkedWorktree, "git_linked_worktree"), (.gitBareLinkedWorktree, "git_bare_linked_worktree"),
+        (.packageRoot, "package_root"), (.workingDirectory, "working_directory")
     ])
     func resolutionSpelling(resolution: WorkspaceIdentity.Resolution, expected: String) {
         let source = report(operations: [])
@@ -140,14 +161,15 @@ struct OutputTests {
         #expect(document.workspace?.repositoryRoot == nil)
     }
 
-    private func operation(kind: ProbeOperation.Kind, succeeded: Bool) -> ProbeOperation {
+    private func operation(kind: ProbeOperation.Kind, succeeded: Bool, contended: Bool = false) -> ProbeOperation {
         ProbeOperation(
             kind: kind, path: "/fixture/support/xc/simulator-pools", succeeded: succeeded,
             byteCount: kind == .write ? 32 : nil, duration: .milliseconds(1),
             failure: succeeded ? nil : OperationFailure(NSError(
                 domain: NSCocoaErrorDomain, code: 513,
                 userInfo: [NSLocalizedDescriptionKey: "Permission denied."]
-            ))
+            )),
+            contended: contended
         )
     }
 

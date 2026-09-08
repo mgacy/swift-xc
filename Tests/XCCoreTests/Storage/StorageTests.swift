@@ -41,6 +41,10 @@ struct StorageTests {
             let worktree = root.appendingPathComponent(name)
             try FileManager.default.createDirectory(at: metadata, withIntermediateDirectories: true)
             try FileManager.default.createDirectory(at: worktree, withIntermediateDirectories: true)
+            if name == "second" {
+                // Exercise the commondir-record branch; "first" exercises the no-record fallback.
+                try Data("../..\n".utf8).write(to: metadata.appendingPathComponent("commondir"))
+            }
             try Data("gitdir: ../Example Repo/.git/worktrees/\(name)\n".utf8).write(to: worktree.appendingPathComponent(".git"))
             let identity = try WorkspaceResolver.resolve(workingDirectory: worktree)
             #expect(identity.resolution == .gitLinkedWorktree)
@@ -51,6 +55,110 @@ struct StorageTests {
             identities.append(identity)
         }
         #expect(identities[0].id != identities[1].id)
+    }
+
+    @Test("A worktree of a bare repository resolves as bare-linked with the bare directory as its root")
+    func bareRepositoryWorktree() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let bare = root.appendingPathComponent("repo.git")
+        let metadata = bare.appendingPathComponent("worktrees/wt")
+        let worktree = root.appendingPathComponent("wt")
+        try FileManager.default.createDirectory(at: metadata, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: worktree, withIntermediateDirectories: true)
+        try Data("../..\n".utf8).write(to: metadata.appendingPathComponent("commondir"))
+        try Data("gitdir: \(metadata.path)\n".utf8).write(to: worktree.appendingPathComponent(".git"))
+        let identity = try WorkspaceResolver.resolve(workingDirectory: worktree)
+        #expect(identity.resolution == .gitBareLinkedWorktree)
+        #expect(identity.repositoryRoot?.path == bare.path)
+        #expect(identity.id.hasPrefix("repo-"))
+    }
+
+    @Test("The <project>/.bare layout resolves with a slug derived from the project, not .bare")
+    func bareDirectoryLayout() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let proj = root.appendingPathComponent("proj")
+        let bare = proj.appendingPathComponent(".bare")
+        let metadata = bare.appendingPathComponent("worktrees/wt")
+        let worktree = root.appendingPathComponent("wt")
+        try FileManager.default.createDirectory(at: metadata, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: worktree, withIntermediateDirectories: true)
+        try Data("../..\n".utf8).write(to: metadata.appendingPathComponent("commondir"))
+        try Data("gitdir: \(metadata.path)\n".utf8).write(to: worktree.appendingPathComponent(".git"))
+        let identity = try WorkspaceResolver.resolve(workingDirectory: worktree)
+        #expect(identity.resolution == .gitBareLinkedWorktree)
+        #expect(identity.repositoryRoot?.path == bare.path)
+        #expect(identity.id.hasPrefix("proj-"))
+        #expect(!identity.id.hasPrefix(".bare-"))
+    }
+
+    @Test("An absolute commondir naming a directory outside <metadata>/../.. still resolves")
+    func relocatedCommonDirectory() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let common = root.appendingPathComponent("elsewhere/.git")
+        let metadata = root.appendingPathComponent("somewhere/worktrees/wt")
+        let worktree = root.appendingPathComponent("wt")
+        try FileManager.default.createDirectory(at: common, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: metadata, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: worktree, withIntermediateDirectories: true)
+        try Data("\(common.path)\n".utf8).write(to: metadata.appendingPathComponent("commondir"))
+        try Data("gitdir: \(metadata.path)\n".utf8).write(to: worktree.appendingPathComponent(".git"))
+        let identity = try WorkspaceResolver.resolve(workingDirectory: worktree)
+        #expect(identity.resolution == .gitLinkedWorktree)
+        #expect(identity.repositoryRoot?.path == common.deletingLastPathComponent().path)
+    }
+
+    @Test("Malformed commondir records throw typed errors", arguments: ["", "one\ntwo", "/definitely/missing/path"])
+    func malformedCommonDirectory(_ content: String) throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let metadata = root.appendingPathComponent("repo.git/worktrees/wt")
+        let worktree = root.appendingPathComponent("wt")
+        try FileManager.default.createDirectory(at: metadata, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: worktree, withIntermediateDirectories: true)
+        try Data(content.utf8).write(to: metadata.appendingPathComponent("commondir"))
+        try Data("gitdir: \(metadata.path)\n".utf8).write(to: worktree.appendingPathComponent(".git"))
+        #expect(throws: WorkspaceResolutionError.self) { try WorkspaceResolver.resolve(workingDirectory: worktree) }
+    }
+
+    @Test("Bare-repository slugs strip a trailing .git and fall back to the parent for a hidden name", arguments: [
+        ("repo.git", "repo-"), ("proj/.bare", "proj-"), ("party🎉.git", "party--")
+    ])
+    func bareSlugDerivation(_ path: String, _ expectedPrefix: String) {
+        let root = URL(fileURLWithPath: "/tmp/workspace-fixture/\(path)")
+        let identity = WorkspaceIdentity(worktreeRoot: root, repositoryRoot: root, resolution: .gitBareLinkedWorktree)
+        #expect(identity.id.hasPrefix(expectedPrefix))
+    }
+
+    @Test("Slug for a plain git worktree repository still uses the raw last path component")
+    func slugScopingGitWorktree() {
+        let root = URL(fileURLWithPath: "/tmp/workspace-fixture/dev/.dotfiles")
+        let identity = WorkspaceIdentity(worktreeRoot: root, repositoryRoot: root, resolution: .gitWorktree)
+        #expect(identity.id.hasPrefix(".dotfiles-"))
+    }
+
+    @Test("Slug for a normal linked worktree still uses the raw last path component")
+    func slugScopingLinkedWorktree() {
+        let worktree = URL(fileURLWithPath: "/tmp/workspace-fixture/worktrees/wt")
+        let repo = URL(fileURLWithPath: "/tmp/workspace-fixture/dev/.dotfiles")
+        let identity = WorkspaceIdentity(worktreeRoot: worktree, repositoryRoot: repo, resolution: .gitLinkedWorktree)
+        #expect(identity.id.hasPrefix(".dotfiles-"))
+    }
+
+    @Test("Slug for a hidden package root still uses its own name")
+    func slugScopingPackageRoot() {
+        let root = URL(fileURLWithPath: "/tmp/workspace-fixture/.hidden-package")
+        let identity = WorkspaceIdentity(worktreeRoot: root, repositoryRoot: nil, resolution: .packageRoot)
+        #expect(identity.id.hasPrefix(".hidden-package-"))
+    }
+
+    @Test("Slug for a plain working directory still uses its own name")
+    func slugScopingWorkingDirectory() {
+        let root = URL(fileURLWithPath: "/tmp/workspace-fixture/.config")
+        let identity = WorkspaceIdentity(worktreeRoot: root, repositoryRoot: nil, resolution: .workingDirectory)
+        #expect(identity.id.hasPrefix(".config-"))
     }
 
     @Test("Canonical aliases produce the same identity and git wins over a nested package")

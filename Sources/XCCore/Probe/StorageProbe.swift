@@ -10,9 +10,17 @@ import Darwin
 import Foundation
 
 public struct StorageProbe: Sendable {
-    private struct DirectoryCreationFailure: Error {
+    internal struct DirectoryCreationFailure: Error {
         let path: URL
         let underlyingError: NSError
+    }
+
+    /// Evidence an action contributes beyond having succeeded.
+    private struct ActionResult {
+        /// Bytes transferred, when the action moves data.
+        var byteCount: Int?
+        /// Whether a competing process had already satisfied the action's postcondition.
+        var contended = false
     }
 
     private let layout: StorageLayout
@@ -44,13 +52,14 @@ public struct StorageProbe: Sendable {
             let preexisting = FileManager.default.fileExists(atPath: resolved.directory.path)
             var created: [URL] = []
             let ready = record(.createDirectory, path: resolved.directory, operations: &operations) {
-                try createDirectories(resolved.directory, created: &created)
-                return nil
+                ActionResult(contended: try createDirectories(resolved.directory,
+                                                              missing: missingAncestors(of: resolved.directory),
+                                                              created: &created))
             }
             if ready {
                 roundTrip(in: resolved.directory, operations: &operations)
             }
-            if location.role != .userCacheRun || !ready {
+            if location.role.removesCreatedDirectories {
                 cleanup(created, operations: &operations)
             }
             return LocationProbe(role: location.role, path: resolved.directory.path,
@@ -66,8 +75,7 @@ public struct StorageProbe: Sendable {
     internal func cleanup(_ created: [URL], operations: inout [ProbeOperation]) {
         for directory in created.reversed() {
             record(.removeDirectory, path: directory, operations: &operations) {
-                try removeEmptyDirectory(directory)
-                return nil
+                ActionResult(contended: try removeEmptyDirectory(directory))
             }
         }
     }
@@ -78,7 +86,7 @@ public struct StorageProbe: Sendable {
         let expected = Data((0..<32).map { _ in UInt8.random(in: .min ... .max, using: &generator) })
         let written = record(.write, path: stub, operations: &operations) {
             try expected.write(to: stub, options: .withoutOverwriting)
-            return expected.count
+            return ActionResult(byteCount: expected.count)
         }
         // A failed write can leave a partially written file that still needs removal.
         let collision = operations.last?.failure.map { $0.domain == NSCocoaErrorDomain && $0.code == NSFileWriteFileExistsError } ?? false
@@ -87,7 +95,7 @@ public struct StorageProbe: Sendable {
             if ownsStub {
                 record(.removeStub, path: stub, operations: &operations) {
                     try FileManager.default.removeItem(at: stub)
-                    return nil
+                    return ActionResult()
                 }
             }
         }
@@ -95,49 +103,92 @@ public struct StorageProbe: Sendable {
         var actual = Data()
         guard record(.read, path: stub, operations: &operations, action: {
             actual = try Data(contentsOf: stub)
-            return actual.count
+            return ActionResult(byteCount: actual.count)
         }) else { return }
         record(.verify, path: stub, operations: &operations) {
             guard actual == expected else {
                 throw NSError(domain: "XCCore.StorageProbe", code: 1,
                     userInfo: [NSLocalizedDescriptionKey: "Read-back bytes differ from the written bytes."])
             }
-            return actual.count
+            return ActionResult(byteCount: actual.count)
         }
     }
 
-    /// Creates missing parents one at a time; only successful creations become owned.
+    /// Returns every path that must be created for a directory to exist.
     ///
-    /// - Throws: The Foundation failure for the first directory that cannot be created.
-    private func createDirectories(_ directory: URL, created: inout [URL]) throws(DirectoryCreationFailure) {
+    /// - Parameter directory: The directory that will be created.
+    /// - Returns: Paths that do not currently exist, ordered child-before-parent. Empty when the
+    ///   directory already exists.
+    internal func missingAncestors(of directory: URL) -> [URL] {
         var missing: [URL] = []
         var current = directory
         while !FileManager.default.fileExists(atPath: current.path) && current.path != "/" {
             missing.append(current)
             current.deleteLastPathComponent()
         }
+        return missing
+    }
+
+    /// Creates the scanned directories one at a time; only successful creations become owned.
+    ///
+    /// A directory that a competing process creates between the scan and the attempt is treated as
+    /// satisfied rather than failed, and is not claimed as owned. A scan result may be stale by the
+    /// time it is used — that is the case this tolerance exists for.
+    ///
+    /// - Parameters:
+    ///   - directory: The target directory, used to attribute a failure when the scan is empty.
+    ///   - missing: The scan result, ordered child-before-parent.
+    ///   - created: Receives every directory this call created, in parent-before-child order.
+    /// - Returns: Whether a competing process created one of the directories first.
+    /// - Throws: The Foundation failure for the first directory that cannot be created.
+    internal func createDirectories(
+        _ directory: URL,
+        missing: [URL],
+        created: inout [URL]
+    ) throws(DirectoryCreationFailure) -> Bool {
         var attempted = directory
+        var contended = false
         do {
             if missing.isEmpty {
                 try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             }
             for candidate in missing.reversed() {
                 attempted = candidate
-                try FileManager.default.createDirectory(at: candidate, withIntermediateDirectories: false)
-                created.append(candidate)
+                do {
+                    try FileManager.default.createDirectory(at: candidate, withIntermediateDirectories: false)
+                    created.append(candidate)
+                } catch let error as NSError where isExistingDirectory(error, at: candidate) {
+                    contended = true
+                }
             }
         } catch {
             throw DirectoryCreationFailure(path: attempted, underlyingError: error as NSError)
         }
+        return contended
+    }
+
+    /// - Parameters:
+    ///   - error: The failure raised by directory creation.
+    ///   - url: The path that could not be created.
+    /// - Returns: Whether the failure is a collision with a directory rather than with a file.
+    private func isExistingDirectory(_ error: NSError, at url: URL) -> Bool {
+        guard error.domain == NSCocoaErrorDomain, error.code == NSFileWriteFileExistsError else { return false }
+        var directory: ObjCBool = false
+        return FileManager.default.fileExists(atPath: url.path, isDirectory: &directory) && directory.boolValue
     }
 
     /// Removes a directory only when it is empty, including at the instant of removal.
     ///
-    /// - Throws: The POSIX failure if removal is refused.
-    private func removeEmptyDirectory(_ directory: URL) throws(NSError) {
+    /// - Parameter directory: The directory to remove.
+    /// - Returns: Whether removal was refused because a competing process populated the directory.
+    /// - Throws: The POSIX failure if removal is refused for any other reason.
+    private func removeEmptyDirectory(_ directory: URL) throws(NSError) -> Bool {
         guard directory.path.withCString({ Darwin.rmdir($0) }) == 0 else {
-            throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
+            let code = errno
+            guard code == ENOTEMPTY else { throw NSError(domain: NSPOSIXErrorDomain, code: Int(code)) }
+            return true
         }
+        return false
     }
 
     /// - Returns: Whether the operation succeeded, after appending its evidence.
@@ -146,13 +197,13 @@ public struct StorageProbe: Sendable {
         _ kind: ProbeOperation.Kind,
         path: URL,
         operations: inout [ProbeOperation],
-        action: () throws -> Int?
+        action: () throws -> ActionResult
     ) -> Bool {
         let start = ContinuousClock.now
         do {
-            let bytes = try action()
-            operations.append(ProbeOperation(kind: kind, path: path.path, succeeded: true, byteCount: bytes,
-                duration: start.duration(to: .now), failure: nil))
+            let result = try action()
+            operations.append(ProbeOperation(kind: kind, path: path.path, succeeded: true, byteCount: result.byteCount,
+                duration: start.duration(to: .now), failure: nil, contended: result.contended))
             return true
         } catch {
             let creation = error as? DirectoryCreationFailure
