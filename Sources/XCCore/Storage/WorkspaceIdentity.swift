@@ -10,7 +10,7 @@ import CryptoKit
 import Foundation
 
 public struct WorkspaceIdentity: Equatable, Sendable {
-    public enum Resolution: String, Sendable {
+    public enum Resolution: Sendable {
         case gitWorktree
         case gitLinkedWorktree
         case gitBareLinkedWorktree
@@ -28,7 +28,9 @@ public struct WorkspaceIdentity: Equatable, Sendable {
     ///
     /// - Parameters:
     ///   - worktreeRoot: The workspace directory.
-    ///   - repositoryRoot: The shared repository directory, when known.
+    ///   - repositoryRoot: The root its worktrees share: the working tree for `.gitWorktree` and
+    ///     `.gitLinkedWorktree`, the repository directory itself for `.gitBareLinkedWorktree`, and
+    ///     nil when no repository was found.
     ///   - resolution: How the workspace directory was discovered.
     public init(worktreeRoot: URL, repositoryRoot: URL?, resolution: Resolution) {
         self.worktreeRoot = worktreeRoot.resolvingSymlinksInPath()

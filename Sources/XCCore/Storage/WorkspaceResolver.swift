@@ -138,7 +138,7 @@ public enum WorkspaceResolver {
         let bare = core.bare ?? (common.lastPathComponent != ".git")
         return WorkspaceIdentity(
             worktreeRoot: worktree,
-            repositoryRoot: bare ? common : mainWorktree(common: common, recorded: core.worktree),
+            repositoryRoot: bare ? common : try mainWorktree(common: common, recorded: core.worktree),
             resolution: bare ? .gitBareLinkedWorktree : .gitLinkedWorktree
         )
     }
@@ -153,9 +153,16 @@ public enum WorkspaceResolver {
     ///   - common: The common directory.
     ///   - recorded: The `core.worktree` record, when present.
     /// - Returns: The main working tree, otherwise the common directory.
-    private static func mainWorktree(common: URL, recorded: String?) -> URL {
-        if let recorded, !recorded.isEmpty { return directoryURL(recorded, relativeTo: common) }
-        return common.lastPathComponent == ".git" ? common.deletingLastPathComponent() : common
+    /// - Throws: `WorkspaceResolutionError` if a recorded working tree does not name a directory.
+    private static func mainWorktree(common: URL, recorded: String?) throws(WorkspaceResolutionError) -> URL {
+        guard let recorded, !recorded.isEmpty else {
+            return common.lastPathComponent == ".git" ? common.deletingLastPathComponent() : common
+        }
+        let worktree = directoryURL(recorded, relativeTo: common)
+        guard try isDirectory(worktree) else {
+            throw invalid(worktree, "The core.worktree record does not name a directory.")
+        }
+        return worktree
     }
 
     /// Reads `core.bare` and `core.worktree` from a repository's configuration.
@@ -201,6 +208,8 @@ public enum WorkspaceResolver {
         return (bare, worktree)
     }
 
+    /// Reads a configuration value the way git reads a boolean.
+    ///
     /// - Parameter value: A configuration value, or nil when the key carries none.
     /// - Returns: The value read as a boolean, or nil when it names neither. A key written without
     ///   a value is true; a key written with an empty one is false.
@@ -215,8 +224,9 @@ public enum WorkspaceResolver {
 
     /// Strips the quoting and trailing comment from a configuration value.
     ///
-    /// Escapes are taken literally rather than translated, which suits the path and boolean values
-    /// this resolver reads.
+    /// `\n`, `\t`, and `\b` are translated, and any other escaped character is kept as written.
+    /// Surrounding whitespace is always trimmed, including whitespace that was written inside
+    /// quotes.
     ///
     /// - Parameter value: The raw text following a key's `=`.
     /// - Returns: The value's content.
@@ -226,7 +236,12 @@ public enum WorkspaceResolver {
         var escaped = false
         for character in value {
             if escaped {
-                content.append(character)
+                switch character {
+                case "n": content.append("\n")
+                case "t": content.append("\t")
+                case "b": content.append("\u{08}")
+                default: content.append(character)
+                }
                 escaped = false
             } else if character == "\\" {
                 escaped = true

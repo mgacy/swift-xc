@@ -17,7 +17,17 @@ public struct StorageProbe: Sendable {
         let contended: Bool
     }
 
-    /// Evidence an action contributes beyond having been attempted.
+    /// How an attempted removal left a directory.
+    private enum Removal {
+        /// The directory was removed.
+        case removed
+        /// The directory was already gone.
+        case absent
+        /// The directory holds contents, so it was left in place.
+        case refused
+    }
+
+    /// What an action reports when it completes without throwing.
     private struct ActionResult {
         /// Bytes transferred, when the action moves data.
         var byteCount: Int?
@@ -33,9 +43,8 @@ public struct StorageProbe: Sendable {
         self.layout = layout
     }
 
-    /// Exercises every location and cleans up owned stubs and empty disposable directories.
-    ///
-    /// The run directory and its ancestors remain available for artifact retention.
+    /// Exercises every location, removing the stubs it wrote and, for roles that do not retain
+    /// them, the directories it created.
     ///
     /// - Returns: Ordered evidence for every location, including failures and cleanup attempts.
     public func run() -> [LocationProbe] {
@@ -47,12 +56,13 @@ public struct StorageProbe: Sendable {
         let start = ContinuousClock.now
         switch location.resolution {
         case .failure(let error):
-            return LocationProbe(role: location.role, path: nil, completed: false, preexisting: false,
-                operations: [ProbeOperation(kind: .resolve, path: error.path?.path, succeeded: false,
-                    byteCount: nil, duration: start.duration(to: .now), failure: OperationFailure(error.underlyingError))])
+            return LocationProbe(role: location.role, path: nil, preexisting: false,
+                operations: [ProbeOperation(kind: .resolve, path: error.path?.path,
+                    outcome: .failed(OperationFailure(error.underlyingError)), byteCount: nil,
+                    duration: start.duration(to: .now), contended: false)])
         case .success(let resolved):
-            var operations = [ProbeOperation(kind: .resolve, path: resolved.root.path, succeeded: true,
-                byteCount: nil, duration: start.duration(to: .now), failure: nil)]
+            var operations = [ProbeOperation(kind: .resolve, path: resolved.root.path, outcome: .satisfied,
+                byteCount: nil, duration: start.duration(to: .now), contended: false)]
             let preexisting = FileManager.default.fileExists(atPath: resolved.directory.path)
             var created: [URL] = []
             let ready = record(.createDirectory, path: resolved.directory, operations: &operations) {
@@ -67,11 +77,12 @@ public struct StorageProbe: Sendable {
                 cleanup(created, operations: &operations)
             }
             return LocationProbe(role: location.role, path: resolved.directory.path,
-                completed: operations.allSatisfy { !$0.faulted }, preexisting: preexisting, operations: operations)
+                preexisting: preexisting, operations: operations)
         }
     }
 
-    /// Removes owned directories deepest-first and records failures without stopping cleanup.
+    /// Removes owned directories deepest-first and records the result of every attempt without
+    /// stopping cleanup.
     ///
     /// - Parameters:
     ///   - created: Owned directories in parent-before-child creation order.
@@ -79,8 +90,11 @@ public struct StorageProbe: Sendable {
     internal func cleanup(_ created: [URL], operations: inout [ProbeOperation]) {
         for directory in created.reversed() {
             record(.removeDirectory, path: directory, operations: &operations) {
-                let refused = try removeEmptyDirectory(directory)
-                return ActionResult(satisfied: !refused, contended: refused)
+                switch try removeEmptyDirectory(directory) {
+                case .removed: ActionResult()
+                case .absent: ActionResult(contended: true)
+                case .refused: ActionResult(satisfied: false, contended: true)
+                }
             }
         }
     }
@@ -122,8 +136,8 @@ public struct StorageProbe: Sendable {
     /// Returns every path that must be created for a directory to exist.
     ///
     /// - Parameter directory: The directory that will be created.
-    /// - Returns: Paths that do not currently exist, ordered child-before-parent. Empty when the
-    ///   directory already exists.
+    /// - Returns: Paths that do not currently exist, `directory` itself first and its ancestors
+    ///   after. Empty when the directory already exists.
     internal func missingAncestors(of directory: URL) -> [URL] {
         var missing: [URL] = []
         var current = directory
@@ -136,12 +150,12 @@ public struct StorageProbe: Sendable {
 
     /// Creates the scanned directories one at a time; only successful creations become owned.
     ///
-    /// A directory that a competing process creates between the scan and the attempt is treated as
-    /// satisfied rather than failed, and is not claimed as owned. A scan result may be stale by the
-    /// time it is used — that is the case this tolerance exists for.
+    /// A directory that appears between the scan and the attempt is treated as satisfied rather
+    /// than failed, and is not claimed as owned.
     ///
     /// - Parameters:
-    ///   - directory: The target directory, used to attribute a failure when the scan is empty.
+    ///   - directory: The target directory. Created with intermediates when the scan is empty, in
+    ///     which case nothing on that path is claimed as owned; also attributes a failure there.
     ///   - missing: The scan result, ordered child-before-parent.
     ///   - created: Receives every directory this call created, in parent-before-child order.
     /// - Returns: Whether a competing process created one of the directories first.
@@ -188,15 +202,17 @@ public struct StorageProbe: Sendable {
     /// Removes a directory only when it is empty, including at the instant of removal.
     ///
     /// - Parameter directory: The directory to remove.
-    /// - Returns: Whether removal was refused because the directory is not empty.
-    /// - Throws: The POSIX failure if removal is refused for any other reason.
-    private func removeEmptyDirectory(_ directory: URL) throws(NSError) -> Bool {
-        guard directory.path.withCString({ Darwin.rmdir($0) }) == 0 else {
-            let code = errno
-            guard code == ENOTEMPTY else { throw NSError(domain: NSPOSIXErrorDomain, code: Int(code)) }
-            return true
+    /// - Returns: How the directory was left. A directory that is already gone satisfies the
+    ///   removal; one that holds contents is left in place.
+    /// - Throws: The POSIX failure if removal fails for any other reason.
+    private func removeEmptyDirectory(_ directory: URL) throws(NSError) -> Removal {
+        let code = directory.path.withCString { path in Darwin.rmdir(path) == 0 ? 0 : errno }
+        switch code {
+        case 0: return .removed
+        case ENOENT: return .absent
+        case ENOTEMPTY, EEXIST: return .refused
+        default: throw NSError(domain: NSPOSIXErrorDomain, code: Int(code))
         }
-        return false
     }
 
     /// - Returns: Whether the operation's postcondition holds, after appending its evidence.
@@ -210,9 +226,9 @@ public struct StorageProbe: Sendable {
         let start = ContinuousClock.now
         do {
             let result = try action()
-            operations.append(ProbeOperation(kind: kind, path: path.path, succeeded: result.satisfied,
-                byteCount: result.byteCount, duration: start.duration(to: .now), failure: nil,
-                contended: result.contended))
+            operations.append(ProbeOperation(kind: kind, path: path.path,
+                outcome: result.satisfied ? .satisfied : .declined, byteCount: result.byteCount,
+                duration: start.duration(to: .now), contended: result.contended))
             return result.satisfied
         } catch {
             operations.append(Self.failedOperation(kind, path: path, error: error, duration: start.duration(to: .now)))
@@ -236,8 +252,8 @@ public struct StorageProbe: Sendable {
         duration: Duration
     ) -> ProbeOperation {
         let creation = error as? DirectoryCreationFailure
-        return ProbeOperation(kind: kind, path: (creation?.path ?? path).path, succeeded: false, byteCount: nil,
-            duration: duration, failure: OperationFailure(creation?.underlyingError ?? error as NSError),
-            contended: creation?.contended ?? false)
+        return ProbeOperation(kind: kind, path: (creation?.path ?? path).path,
+            outcome: .failed(OperationFailure(creation?.underlyingError ?? error as NSError)), byteCount: nil,
+            duration: duration, contended: creation?.contended ?? false)
     }
 }

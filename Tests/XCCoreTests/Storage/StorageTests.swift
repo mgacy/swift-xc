@@ -190,6 +190,39 @@ struct StorageTests {
         #expect(throws: WorkspaceResolutionError.self) { try WorkspaceResolver.resolve(workingDirectory: worktree) }
     }
 
+    @Test("A core.worktree record that does not name a directory throws")
+    func unresolvableRecordedWorktree() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let common = root.appendingPathComponent("sepdir")
+        let metadata = common.appendingPathComponent("worktrees/wt")
+        let worktree = root.appendingPathComponent("wt")
+        try FileManager.default.createDirectory(at: metadata, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: worktree, withIntermediateDirectories: true)
+        try Data("[core]\n\tbare = false\n\tworktree = \(root.path)/moved\n".utf8)
+            .write(to: common.appendingPathComponent("config"))
+        try Data("gitdir: \(metadata.path)\n".utf8).write(to: worktree.appendingPathComponent(".git"))
+        #expect(throws: WorkspaceResolutionError.self) { try WorkspaceResolver.resolve(workingDirectory: worktree) }
+    }
+
+    @Test("Configuration escapes are translated the way they are written")
+    func configurationEscapes() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let common = root.appendingPathComponent("sepdir")
+        let metadata = common.appendingPathComponent("worktrees/wt")
+        let worktree = root.appendingPathComponent("wt")
+        let main = root.appendingPathComponent("a\tb")
+        try FileManager.default.createDirectory(at: metadata, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: worktree, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: main, withIntermediateDirectories: true)
+        try Data("[core]\n\tbare = false\n\tworktree = \"\(root.path)/a\\tb\"\n".utf8)
+            .write(to: common.appendingPathComponent("config"))
+        try Data("gitdir: \(metadata.path)\n".utf8).write(to: worktree.appendingPathComponent(".git"))
+        let identity = try WorkspaceResolver.resolve(workingDirectory: worktree)
+        #expect(identity.repositoryRoot?.path == main.path)
+    }
+
     @Test("Malformed commondir records throw typed errors", arguments: ["", "one\ntwo", "/definitely/missing/path"])
     func malformedCommonDirectory(_ content: String) throws {
         let root = try temporaryDirectory()

@@ -19,37 +19,49 @@ public struct ProbeOperation: Sendable, Equatable {
         case removeDirectory
     }
 
+    /// What an attempted action established.
+    public enum Outcome: Sendable, Equatable {
+        /// The action's postcondition holds.
+        case satisfied
+        /// The postcondition does not hold, and no defect in the storage is attributed: a cleanup
+        /// removal refused because the directory is not empty.
+        case declined
+        /// The action failed, and the failure is evidence of a storage defect.
+        case failed(OperationFailure)
+    }
+
     public let kind: Kind
     public let path: String?
-    /// Whether the action's postcondition holds.
-    public let succeeded: Bool
+    public let outcome: Outcome
     public let byteCount: Int?
     public let duration: Duration
-    public let failure: OperationFailure?
-    /// Whether a competing process interfered with the action.
+    /// Whether a path the action touched was already in the state the action would have produced,
+    /// or already held contents the action did not create.
+    ///
+    /// Only directory creation and removal record this, and it can describe a path earlier in the
+    /// action than the one a failure stopped on.
     public let contended: Bool
+
+    /// Whether the action's postcondition holds.
+    public var succeeded: Bool { outcome == .satisfied }
+
+    /// The failure the action raised, when it failed.
+    public var failure: OperationFailure? {
+        if case .failed(let failure) = outcome { failure } else { nil }
+    }
 
     /// Whether the operation is evidence of a storage defect.
     ///
-    /// An unmet postcondition that attributes no failure — a cleanup removal refused because the
-    /// directory is not empty — is recorded rather than treated as a defect in the storage itself.
+    /// A declined action leaves its postcondition unmet without attributing a failure, so an
+    /// operation can be evidence of no defect without having succeeded.
     public var faulted: Bool { failure != nil }
 
-    public init(
-        kind: Kind,
-        path: String?,
-        succeeded: Bool,
-        byteCount: Int?,
-        duration: Duration,
-        failure: OperationFailure?,
-        contended: Bool = false
-    ) {
+    public init(kind: Kind, path: String?, outcome: Outcome, byteCount: Int?, duration: Duration, contended: Bool) {
         self.kind = kind
         self.path = path
-        self.succeeded = succeeded
+        self.outcome = outcome
         self.byteCount = byteCount
         self.duration = duration
-        self.failure = failure
         self.contended = contended
     }
 }
@@ -70,9 +82,14 @@ public struct OperationFailure: Sendable, Equatable {
 public struct LocationProbe: Sendable, Equatable {
     public let role: StorageRole
     public let path: String?
-    public let completed: Bool
     public let preexisting: Bool
     public let operations: [ProbeOperation]
+
+    /// Whether the location was probed with no operation attributing a failure.
+    ///
+    /// A declined operation leaves its postcondition unmet without attributing a failure, so a
+    /// location can complete holding an operation that did not succeed.
+    public var completed: Bool { !operations.contains(where: \.faulted) }
 }
 
 public struct StorageProbeReport: Sendable {

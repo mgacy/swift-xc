@@ -34,7 +34,7 @@ public enum ProbeResultProjection {
             },
             artifacts: .init(
                 result: report.artifactPath?.path,
-                retained: report.artifactPath != nil && report.artifactWrite?.succeeded != false,
+                retained: report.artifactPath != nil && report.artifactWrite?.faulted != true,
                 write: report.artifactWrite.map(operation)
             ),
             storage: .init(

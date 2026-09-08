@@ -104,10 +104,10 @@ public struct RunSession: Sendable {
             return ProbeOperation(
                 kind: .write,
                 path: path.path,
-                succeeded: false,
+                outcome: .failed(OperationFailure(error as NSError)),
                 byteCount: nil,
                 duration: start.duration(to: .now),
-                failure: OperationFailure(error as NSError)
+                contended: false
             )
         }
     }

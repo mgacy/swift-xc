@@ -197,7 +197,7 @@ struct StorageProbeTests {
         var operations: [ProbeOperation] = []
         StorageProbe(layout: try layout(root)).cleanup([empty, occupied], operations: &operations)
         #expect(operations.map(\.kind) == [.removeDirectory, .removeDirectory])
-        #expect(operations.map(\.succeeded) == [false, true])
+        #expect(operations.map(\.outcome) == [.declined, .satisfied])
         #expect(operations.allSatisfy { !$0.faulted })
         #expect(operations[0].contended)
         #expect(operations[0].failure == nil)
@@ -205,6 +205,33 @@ struct StorageProbeTests {
         #expect(FileManager.default.fileExists(atPath: occupied.path))
         #expect(try Data(contentsOf: foreign) == Data([4, 5]))
         #expect(!FileManager.default.fileExists(atPath: empty.path))
+    }
+
+    @Test("A directory already gone satisfies its removal rather than failing the run")
+    func cleanupAlreadyRemoved() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        var operations: [ProbeOperation] = []
+        StorageProbe(layout: try layout(root)).cleanup([root.appendingPathComponent("gone")], operations: &operations)
+        #expect(operations.map(\.outcome) == [.satisfied])
+        #expect(operations[0].contended)
+        #expect(!operations[0].faulted)
+    }
+
+    @Test("A removal refused for a reason other than contents is a failure")
+    func cleanupDeniedRemoval() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: root.path) }
+        defer { try? FileManager.default.removeItem(at: root) }
+        let locked = root.appendingPathComponent("locked")
+        try FileManager.default.createDirectory(at: locked, withIntermediateDirectories: false)
+        let probe = StorageProbe(layout: try layout(root))
+        try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: root.path)
+        var operations: [ProbeOperation] = []
+        probe.cleanup([locked], operations: &operations)
+        #expect(!operations[0].succeeded)
+        #expect(operations[0].faulted)
+        #expect(operations[0].failure?.domain == NSPOSIXErrorDomain)
     }
 
     @Test("A failed write preserves the existing directory and omits dependent operations", .enabled(if: geteuid() != 0))
@@ -279,9 +306,10 @@ extension StorageProbeTests {
         let workspace = try WorkspaceResolver.resolve(workingDirectory: root)
         let caches = root.appendingPathComponent("caches")
         let support = root.appendingPathComponent("support")
-        // Pre-create the worktree-local roles so neither run owns them: same-worktree concurrency
-        // for these two roles is an excluded guarantee (see "The same-worktree limit"), and this
-        // test isolates the shared tool-storage paths instead.
+        // Pre-create the worktree-local roles so no run owns them. Two runs in one worktree
+        // resolve .build/xc-probe and .deriveddata to the same path, where one run's sweep can
+        // remove a directory the other is probing; that case needs a lock rather than tolerance,
+        // so this test isolates the shared tool-storage paths instead.
         try FileManager.default.createDirectory(
             at: StorageRole.worktreeBuild.directory(root: workspace.worktreeRoot, workspaceID: workspace.id, runIdentifier: RunIdentifier()),
             withIntermediateDirectories: true)

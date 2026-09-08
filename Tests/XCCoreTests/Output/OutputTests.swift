@@ -61,6 +61,23 @@ struct OutputTests {
         #expect(projected?.error == nil)
     }
 
+    @Test("A location completes when nothing faulted, and does not when something did", arguments: [
+        (ProbeOperation.Outcome.satisfied, true), (.declined, true),
+        (.failed(OperationFailure(NSError(domain: NSPOSIXErrorDomain, code: 1))), false)
+    ])
+    func locationCompletion(_ outcome: ProbeOperation.Outcome, _ completed: Bool) {
+        let location = LocationProbe(
+            role: .applicationSupport, path: "/fixture", preexisting: false,
+            operations: [ProbeOperation(
+                kind: .removeDirectory, path: "/fixture", outcome: outcome, byteCount: nil,
+                duration: .zero, contended: false
+            )]
+        )
+        #expect(location.completed == completed)
+        #expect(ProbeResultProjection.project(report(operations: location.operations)).outcome
+            == (completed ? .passed : .infrastructureError))
+    }
+
     @Test("An uncontended operation omits the contended key entirely")
     func uncontended() throws {
         let document = ProbeResultProjection.project(report(operations: [operation(kind: .write, succeeded: true)]))
@@ -188,14 +205,19 @@ struct OutputTests {
         contended: Bool = false,
         attributesFailure: Bool? = nil
     ) -> ProbeOperation {
-        ProbeOperation(
-            kind: kind, path: "/fixture/support/xc/simulator-pools", succeeded: succeeded,
-            byteCount: kind == .write ? 32 : nil, duration: .milliseconds(1),
-            failure: (attributesFailure ?? !succeeded) ? OperationFailure(NSError(
+        let outcome: ProbeOperation.Outcome = if attributesFailure ?? !succeeded {
+            .failed(OperationFailure(NSError(
                 domain: NSCocoaErrorDomain, code: 513,
                 userInfo: [NSLocalizedDescriptionKey: "Permission denied."]
-            )) : nil,
-            contended: contended
+            )))
+        } else if succeeded {
+            .satisfied
+        } else {
+            .declined
+        }
+        return ProbeOperation(
+            kind: kind, path: "/fixture/support/xc/simulator-pools", outcome: outcome,
+            byteCount: kind == .write ? 32 : nil, duration: .milliseconds(1), contended: contended
         )
     }
 
@@ -210,7 +232,7 @@ struct OutputTests {
             duration: .milliseconds(12),
             locations: [LocationProbe(
                 role: .applicationSupport, path: "/fixture/support/xc/simulator-pools",
-                completed: operations.allSatisfy { !$0.faulted }, preexisting: false, operations: operations
+                preexisting: false, operations: operations
             )],
             artifactPath: URL(fileURLWithPath: "/fixture/cache/result.json"), artifactWrite: artifactWrite
         )
