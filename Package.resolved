@@ -1,5 +1,5 @@
 {
-  "originHash" : "60a7fdd7743547c52843d08ae1e73517914b52c92d0d670fe0bd55e57812cd4a",
+  "originHash" : "bcddafade5cc8fd5920b70ae8f6110381dd0cadabf82e2e7b1b99766d7817d26",
   "pins" : [
     {
       "identity" : "swift-argument-parser",
@@ -15,8 +15,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/mgacy/swift-version-file-plugin.git",
       "state" : {
-        "revision" : "23349c4f7c66eed19dee3cccd186e131eebc503f",
-        "version" : "0.2.1"
+        "revision" : "a4f5882c4ecb8747234e349948b7984b967296de",
+        "version" : "0.3.0"
       }
     }
   ],
