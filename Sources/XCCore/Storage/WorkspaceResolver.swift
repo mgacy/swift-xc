@@ -168,8 +168,9 @@ public enum WorkspaceResolver {
     /// Reads `core.bare` and `core.worktree` from a repository's configuration.
     ///
     /// Only the `core` section is scanned, and only for those two keys; every other section, key,
-    /// and include directive is ignored, as is a key written on a section header's own line. An
-    /// absent configuration yields no records, so a repository without one still resolves.
+    /// and include directive is ignored, as is a key written on a section header's own line. A
+    /// subsection names its own keys, so `[core "name"]` is not the `core` section. An absent
+    /// configuration yields no records, so a repository without one still resolves.
     ///
     /// - Parameter common: The common directory holding the configuration.
     /// - Returns: The recorded values, each nil when the key is absent or uninterpretable.
@@ -188,11 +189,12 @@ public enum WorkspaceResolver {
         var core = false
         var bare: Bool?
         var worktree: String?
-        for line in contents.split(separator: "\n", omittingEmptySubsequences: false) {
+        for line in contents.split(whereSeparator: \.isNewline) {
             let statement = line.trimmingCharacters(in: .whitespaces)
             if statement.isEmpty || statement.hasPrefix("#") || statement.hasPrefix(";") { continue }
             if statement.hasPrefix("[") {
-                core = statement.dropFirst().prefix { !" \t]".contains($0) }.lowercased() == "core"
+                let header = statement.dropFirst().prefix { $0 != "]" }
+                core = header.trimmingCharacters(in: .whitespaces).lowercased() == "core"
                 continue
             }
             guard core else { continue }

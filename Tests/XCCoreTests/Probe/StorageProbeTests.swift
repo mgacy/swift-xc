@@ -69,6 +69,74 @@ struct StorageProbeTests {
         #expect(created.isEmpty)
     }
 
+    @Test("A file already blocking an ancestor is named itself, not the child that cannot be created inside it")
+    func creationBlockedByPreexistingFile() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let probe = StorageProbe(layout: try layout(root))
+        let blocked = root.appendingPathComponent("a")
+        try Data().write(to: blocked)
+        let target = root.appendingPathComponent("a/b/c")
+        var created: [URL] = []
+        let failure = #expect(throws: StorageProbe.DirectoryCreationFailure.self) {
+            try probe.createDirectories(target, missing: probe.missingAncestors(of: target), created: &created)
+        }
+        #expect(failure?.path.path == blocked.path)
+        #expect(failure?.underlyingError.code == Int(ENOTDIR))
+        #expect(created.isEmpty)
+    }
+
+    @Test("An ancestor symbolic link to a directory is not a blocker, since creation through it succeeds")
+    func creationThroughPreexistingSymbolicLink() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let probe = StorageProbe(layout: try layout(root))
+        let elsewhere = root.appendingPathComponent("elsewhere")
+        try FileManager.default.createDirectory(at: elsewhere, withIntermediateDirectories: false)
+        try FileManager.default.createSymbolicLink(at: root.appendingPathComponent("a"), withDestinationURL: elsewhere)
+        let target = root.appendingPathComponent("a/b/c")
+        var created: [URL] = []
+        let contended = try probe.createDirectories(target, missing: probe.missingAncestors(of: target), created: &created)
+        #expect(!contended)
+        #expect(created.map(\.path) == [root.appendingPathComponent("a/b").path, target.path])
+        var operations: [ProbeOperation] = []
+        probe.cleanup(created, operations: &operations)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: elsewhere.path).isEmpty)
+    }
+
+    @Test("A directory removed after an empty scan is recreated as owned rather than left behind")
+    func emptyScanRecreation() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let probe = StorageProbe(layout: try layout(root))
+        let target = root.appendingPathComponent("target")
+        try FileManager.default.createDirectory(at: target, withIntermediateDirectories: false)
+        let missing = probe.missingAncestors(of: target)
+        #expect(missing.isEmpty)
+        try FileManager.default.removeItem(at: target)
+        var created: [URL] = []
+        let contended = try probe.createDirectories(target, missing: missing, created: &created)
+        #expect(contended)
+        #expect(created.map(\.path) == [target.path])
+        var operations: [ProbeOperation] = []
+        probe.cleanup(created, operations: &operations)
+        #expect(!FileManager.default.fileExists(atPath: target.path))
+    }
+
+    @Test("A directory still present at an empty scan's attempt is neither claimed nor reported as contention")
+    func emptyScanRetention() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let probe = StorageProbe(layout: try layout(root))
+        let target = root.appendingPathComponent("target")
+        try FileManager.default.createDirectory(at: target, withIntermediateDirectories: false)
+        var created: [URL] = []
+        let contended = try probe.createDirectories(target, missing: probe.missingAncestors(of: target), created: &created)
+        #expect(!contended)
+        #expect(created.isEmpty)
+        #expect(FileManager.default.fileExists(atPath: target.path))
+    }
+
     @Test("Preserves preexisting directories and their files")
     func preexisting() throws {
         let root = try temporaryDirectory()

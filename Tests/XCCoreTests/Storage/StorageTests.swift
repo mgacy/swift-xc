@@ -108,7 +108,9 @@ struct StorageTests {
         ("repo.git", "[core]\n\tbare = \"false\" ; trailing\n", .gitLinkedWorktree),
         ("repo.git", "[remote \"origin\"]\n\tbare = true\n", .gitBareLinkedWorktree),
         (".git", "[remote \"origin\"]\n\tbare = true\n", .gitLinkedWorktree),
-        (".git", "[core]\n\tbare = true\n", .gitBareLinkedWorktree)
+        (".git", "[core]\n\tbare = true\n", .gitBareLinkedWorktree),
+        (".git", "[core \"sub\"]\n\tbare = true\n", .gitLinkedWorktree),
+        ("repo.git", "[core]\r\n\tbare = false\r\n", .gitLinkedWorktree)
     ])
     func recordedTopology(_ name: String, _ config: String, _ expected: WorkspaceIdentity.Resolution) throws {
         let root = try temporaryDirectory()

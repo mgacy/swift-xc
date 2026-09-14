@@ -163,29 +163,56 @@ public struct StorageProbe: Sendable {
         return missing
     }
 
+    /// Returns the existing ancestor that creation cannot proceed through.
+    ///
+    /// The scan stops at the first path that exists, which need not be a directory.
+    ///
+    /// - Parameter missing: The scan result, ordered child-before-parent.
+    /// - Returns: The deepest existing ancestor when it is not a directory, otherwise nil. A
+    ///   symbolic link to a directory is not a blocker, since creation through it succeeds.
+    private func blockingAncestor(under missing: [URL]) -> URL? {
+        guard let deepest = missing.last else { return nil }
+        let ancestor = deepest.deletingLastPathComponent()
+        var status = stat()
+        guard ancestor.path.withCString({ stat($0, &status) }) == 0 else { return nil }
+        return status.st_mode & S_IFMT == S_IFDIR ? nil : ancestor
+    }
+
     /// Creates the scanned directories one at a time; only successful creations become owned.
     ///
     /// A directory that appears between the scan and the attempt is treated as satisfied rather
-    /// than failed, and is not claimed as owned.
+    /// than failed, and is not claimed as owned. An empty scan attempts the target itself, so a
+    /// directory removed after the scan is recreated and claimed as owned.
     ///
     /// - Parameters:
-    ///   - directory: The target directory, created with intermediates when the scan is empty; no
-    ///     path is then claimed as owned.
+    ///   - directory: The target directory, attempted without intermediates when the scan is empty.
     ///   - missing: The scan result, ordered child-before-parent.
     ///   - created: Receives every directory this call created, in parent-before-child order.
-    /// - Returns: Whether a competing process created one of the directories first.
-    /// - Throws: `DirectoryCreationFailure` naming the first directory that cannot be created, or
-    ///   `directory` itself when the scan was empty.
+    /// - Returns: Whether a competing process created or removed one of the directories first.
+    /// - Throws: `DirectoryCreationFailure` naming the first directory that cannot be created, the
+    ///   existing ancestor blocking every one of them, or `directory` itself when the scan was
+    ///   empty.
     internal func createDirectories(
         _ directory: URL,
         missing: [URL],
         created: inout [URL]
     ) throws(DirectoryCreationFailure) -> Bool {
+        if let blocked = blockingAncestor(under: missing) {
+            throw DirectoryCreationFailure(
+                path: blocked,
+                underlyingError: NSError(domain: NSPOSIXErrorDomain, code: Int(ENOTDIR),
+                    userInfo: [NSFilePathErrorKey: blocked.path]),
+                contended: false
+            )
+        }
         var attempted = directory
         var contended = false
         do {
             if missing.isEmpty {
-                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                if try createIfAbsent(directory) {
+                    created.append(directory)
+                    contended = true
+                }
             }
             for candidate in missing.reversed() {
                 attempted = candidate
@@ -200,6 +227,23 @@ public struct StorageProbe: Sendable {
             throw DirectoryCreationFailure(path: attempted, underlyingError: error as NSError, contended: contended)
         }
         return contended
+    }
+
+    /// Creates a directory, tolerating one that already exists.
+    ///
+    /// - Parameter directory: The directory to create, without intermediates.
+    /// - Returns: Whether this call created the directory.
+    /// - Throws: The Foundation failure if the directory neither exists nor can be created.
+    private func createIfAbsent(_ directory: URL) throws(NSError) -> Bool {
+        do {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
+            return true
+        } catch let error as NSError where error.domain == NSCocoaErrorDomain
+            && error.code == NSFileWriteFileExistsError {
+            return false
+        } catch {
+            throw error as NSError
+        }
     }
 
     /// - Parameters:
