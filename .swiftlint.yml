@@ -2,6 +2,7 @@ excluded:
   - .build
   - .claude/worktrees
   - Sources/xc/Version.swift
+  - Examples
 
 opt_in_rules:
   - array_init
