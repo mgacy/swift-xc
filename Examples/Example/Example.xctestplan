@@ -1,0 +1,44 @@
+{
+  "configurations" : [
+    {
+      "id" : "9A2FDD32-2777-4E59-8745-AE1624F8F4BF",
+      "name" : "Test Scheme Action",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "codeCoverage" : false,
+    "performanceAntipatternCheckerEnabled" : true,
+    "targetForVariableExpansion" : {
+      "containerPath" : "container:Example.xcodeproj",
+      "identifier" : "C9DD36A4304F0B7400F85666",
+      "name" : "Example"
+    }
+  },
+  "testTargets" : [
+    {
+      "target" : {
+        "containerPath" : "container:Packages\/SharedKit",
+        "identifier" : "SharedKitTests",
+        "name" : "SharedKitTests"
+      }
+    },
+    {
+      "target" : {
+        "containerPath" : "container:Packages\/SharedKit",
+        "identifier" : "SharedKitEnvironmentTests",
+        "name" : "SharedKitEnvironmentTests"
+      }
+    },
+    {
+      "target" : {
+        "containerPath" : "container:Packages\/MobileKit",
+        "identifier" : "MobileKitTests",
+        "name" : "MobileKitTests"
+      }
+    }
+  ],
+  "version" : 1
+}
