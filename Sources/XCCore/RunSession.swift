@@ -64,9 +64,16 @@ public struct RunSession: Sendable {
         let artifactPath = layout.locations.first { $0.role == .userCacheRun }.flatMap {
             try? $0.resolution.get().directory.appendingPathComponent("result.json")
         }
-        let report = StorageProbeReport(runID: runIdentifier, workspace: try? workspace.get(),
-            toolVersion: toolVersion, startedAt: startedAt, duration: start.duration(to: .now),
-            locations: locations, artifactPath: artifactPath, artifactWrite: nil)
+        let report = StorageProbeReport(
+            runID: runIdentifier,
+            workspace: try? workspace.get(),
+            toolVersion: toolVersion,
+            startedAt: startedAt,
+            duration: start.duration(to: .now),
+            locations: locations,
+            artifactPath: artifactPath,
+            artifactWrite: nil
+        )
         let document = ProbeResultProjection.project(report)
         let bytes = try ResultEncoder.encode(document)
         guard let artifactPath else { return Output(bytes: bytes, outcome: document.outcome) }
