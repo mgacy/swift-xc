@@ -12,7 +12,7 @@ import Testing
 
 @Suite("Run session")
 struct RunSessionTests {
-    @Test("Retains the exact final bytes and removes disposable probe directories")
+    @Test("Retains the exact final bytes, retaining long-lived tool storage and removing disposable probe directories")
     func retainsFinalBytes() throws {
         let fixture = try SessionFixture()
         defer { fixture.remove() }
@@ -25,11 +25,30 @@ struct RunSessionTests {
         #expect(try Data(contentsOf: URL(fileURLWithPath: path)) == result.bytes)
         #expect(try FileManager.default.contentsOfDirectory(atPath: URL(fileURLWithPath: path).deletingLastPathComponent().path) == ["result.json"])
         #expect(document.storage?.locations.count == 6)
-        for location in try #require(document.storage?.locations) where location.role != "user_cache_run" {
-            #expect(!FileManager.default.fileExists(atPath: try #require(location.path)))
+        for location in try #require(document.storage?.locations) {
+            let role = try #require(StorageRole(rawValue: location.role))
+            #expect(FileManager.default.fileExists(atPath: try #require(location.path)) == !role.removesCreatedDirectories)
         }
         #expect(!FileManager.default.fileExists(atPath: fixture.workspace.appendingPathComponent(".build").path))
-        #expect(!FileManager.default.fileExists(atPath: fixture.support.path))
+        #expect(FileManager.default.fileExists(atPath: fixture.support.path))
+    }
+
+    @Test("A second run against the same roots finds tool storage preexisting and still completes")
+    func repeatRun() throws {
+        let fixture = try SessionFixture()
+        defer { fixture.remove() }
+        let identifier = RunIdentifier()
+        _ = try fixture.session().run(runIdentifier: identifier)
+        let result = try fixture.session().run(runIdentifier: identifier)
+        let document = try decode(result.bytes)
+        #expect(result.outcome == .passed)
+        for location in try #require(document.storage?.locations) {
+            #expect(location.completed)
+            let role = try #require(StorageRole(rawValue: location.role))
+            if !role.removesCreatedDirectories {
+                #expect(location.preexisting)
+            }
+        }
     }
 
     @Test("An atomic artifact failure re-encodes failure evidence after a successful sweep")

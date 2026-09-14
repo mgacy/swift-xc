@@ -10,6 +10,12 @@ import Foundation
 import Testing
 @testable import XCCore
 
+/// A Cocoa permission failure for operation fixtures.
+private let permissionDenied = OperationFailure(NSError(
+    domain: NSCocoaErrorDomain, code: 513,
+    userInfo: [NSLocalizedDescriptionKey: "Permission denied."]
+))
+
 @Suite("Output")
 struct OutputTests {
     @Test("Only reachable outcomes map to process status", arguments: [
@@ -26,21 +32,69 @@ struct OutputTests {
         ProbeOperation.Kind.resolve, .createDirectory, .write, .read, .verify, .removeStub, .removeDirectory
     ])
     func operationFailure(kind: ProbeOperation.Kind) {
-        let document = ProbeResultProjection.project(report(operations: [operation(kind: kind, succeeded: false)]))
+        let document = ProbeResultProjection.project(report(operations: [operation(kind: kind, outcome: .failed(permissionDenied))]))
         #expect(document.outcome == .infrastructureError)
     }
 
     @Test("Successful storage evidence passes and preserves byte counts")
     func success() {
-        let document = ProbeResultProjection.project(report(operations: [operation(kind: .write, succeeded: true)]))
+        let document = ProbeResultProjection.project(report(operations: [operation(kind: .write, outcome: .satisfied)]))
         #expect(document.outcome == .passed)
         #expect(document.artifacts?.retained == true)
         #expect(document.storage?.locations.first?.operations.first?.byteCount == 32)
     }
 
+    @Test("A contended operation projects contended: true and stays passed")
+    func contended() throws {
+        let document = ProbeResultProjection.project(report(operations: [
+            operation(kind: .createDirectory, outcome: .satisfied, contended: true)
+        ]))
+        #expect(document.outcome == .passed)
+        #expect(document.storage?.locations.first?.operations.first?.contended == true)
+        let operations = try encodedOperations(document)
+        #expect(operations.first?["contended"] as? Bool == true)
+    }
+
+    @Test("A refused cleanup removal records an unmet postcondition without failing the run")
+    func refusedRemoval() {
+        let document = ProbeResultProjection.project(report(operations: [
+            operation(kind: .removeDirectory, outcome: .declined, contended: true)
+        ]))
+        #expect(document.outcome == .passed)
+        let projected = document.storage?.locations.first?.operations.first
+        #expect(projected?.succeeded == false)
+        #expect(projected?.contended == true)
+        #expect(projected?.error == nil)
+    }
+
+    @Test("A location completes when nothing faulted, and does not when something did", arguments: [
+        (ProbeOperation.Outcome.satisfied, true), (.declined, true),
+        (.failed(OperationFailure(NSError(domain: NSPOSIXErrorDomain, code: 1))), false)
+    ])
+    func locationCompletion(_ outcome: ProbeOperation.Outcome, _ completed: Bool) {
+        let location = LocationProbe(
+            role: .applicationSupport, path: "/fixture", preexisting: false,
+            operations: [ProbeOperation(
+                kind: .removeDirectory, path: "/fixture", outcome: outcome, byteCount: nil,
+                duration: .zero, contended: false
+            )]
+        )
+        #expect(location.completed == completed)
+        #expect(ProbeResultProjection.project(report(operations: location.operations)).outcome
+            == (completed ? .passed : .infrastructureError))
+    }
+
+    @Test("An uncontended operation omits the contended key entirely")
+    func uncontended() throws {
+        let document = ProbeResultProjection.project(report(operations: [operation(kind: .write, outcome: .satisfied)]))
+        #expect(document.storage?.locations.first?.operations.first?.contended == nil)
+        let operations = try encodedOperations(document)
+        #expect(operations.first?["contended"] == nil)
+    }
+
     @Test("Artifact failure is retained as evidence and clears retention")
     func artifactFailure() {
-        let failed = operation(kind: .write, succeeded: false)
+        let failed = operation(kind: .write, outcome: .failed(permissionDenied))
         let document = ProbeResultProjection.project(report(operations: [], artifactWrite: failed))
         #expect(document.outcome == .infrastructureError)
         #expect(document.artifacts?.retained == false)
@@ -63,12 +117,8 @@ struct OutputTests {
 
     @Test("Unresolved roots never invent workspace or artifact paths")
     func unresolved() {
-        let original = report(operations: [operation(kind: .resolve, succeeded: false)])
-        let unresolved = StorageProbeReport(
-            runID: original.runID, workspace: nil, toolVersion: original.toolVersion,
-            startedAt: original.startedAt, duration: original.duration, locations: original.locations,
-            artifactPath: nil, artifactWrite: nil
-        )
+        let unresolved = report(operations: [operation(kind: .resolve, outcome: .failed(permissionDenied))],
+                                workspace: nil, artifactPath: nil)
         let document = ProbeResultProjection.project(unresolved)
         #expect(document.workspace == nil)
         #expect(document.artifacts?.result == nil)
@@ -78,7 +128,7 @@ struct OutputTests {
 
     @Test("Projection matches V1 golden bytes and independent schema")
     func golden() throws {
-        let source = report(operations: [operation(kind: .createDirectory, succeeded: false)])
+        let source = report(operations: [operation(kind: .createDirectory, outcome: .failed(permissionDenied))])
         let bytes = try ResultEncoder.encode(ProbeResultProjection.project(source))
         let text = try #require(String(data: bytes, encoding: .utf8))
             .replacingOccurrences(of: source.runID.rawValue, with: "20260907T024233Z-3f91c04a2b6d")
@@ -119,52 +169,66 @@ struct OutputTests {
         (.removeStub, "remove_stub"), (.removeDirectory, "remove_created_directories")
     ])
     func operationSpelling(kind: ProbeOperation.Kind, expected: String) {
-        let document = ProbeResultProjection.project(report(operations: [operation(kind: kind, succeeded: true)]))
+        let document = ProbeResultProjection.project(report(operations: [operation(kind: kind, outcome: .satisfied)]))
         #expect(document.storage?.locations.first?.operations.first?.kind == expected)
     }
 
     @Test("Workspace resolution uses V1 spelling", arguments: [
         (WorkspaceIdentity.Resolution.gitWorktree, "git_worktree"),
-        (.gitLinkedWorktree, "git_linked_worktree"), (.packageRoot, "package_root"),
-        (.workingDirectory, "working_directory")
+        (.gitLinkedWorktree, "git_linked_worktree"), (.gitBareLinkedWorktree, "git_bare_linked_worktree"),
+        (.packageRoot, "package_root"), (.workingDirectory, "working_directory")
     ])
     func resolutionSpelling(resolution: WorkspaceIdentity.Resolution, expected: String) {
-        let source = report(operations: [])
         let workspace = WorkspaceIdentity(worktreeRoot: URL(fileURLWithPath: "/fixture/project"),
                                           repositoryRoot: nil, resolution: resolution)
-        let report = StorageProbeReport(runID: source.runID, workspace: workspace, toolVersion: source.toolVersion,
-                                        startedAt: source.startedAt, duration: source.duration, locations: [],
-                                        artifactPath: nil, artifactWrite: nil)
-        let document = ProbeResultProjection.project(report)
+        let document = ProbeResultProjection.project(
+            report(operations: [], workspace: workspace, artifactPath: nil)
+        )
         #expect(document.workspace?.resolution == expected)
         #expect(document.workspace?.repositoryRoot == nil)
     }
 
-    private func operation(kind: ProbeOperation.Kind, succeeded: Bool) -> ProbeOperation {
+    /// - Parameter document: The document to encode.
+    /// - Returns: The serialized operations of the document's first storage location.
+    /// - Throws: An encoding or serialization failure, or an issue if the shape does not match.
+    private func encodedOperations(_ document: ProbeResultDocument.V1) throws -> [[String: Any]] {
+        let bytes = try ResultEncoder.encode(document)
+        let object = try #require(JSONSerialization.jsonObject(with: bytes) as? [String: Any])
+        let storage = try #require(object["storage"] as? [String: Any])
+        let locations = try #require(storage["locations"] as? [[String: Any]])
+        return try #require(locations.first?["operations"] as? [[String: Any]])
+    }
+
+    private func operation(
+        kind: ProbeOperation.Kind,
+        outcome: ProbeOperation.Outcome,
+        contended: Bool = false
+    ) -> ProbeOperation {
         ProbeOperation(
-            kind: kind, path: "/fixture/support/xc/simulator-pools", succeeded: succeeded,
-            byteCount: kind == .write ? 32 : nil, duration: .milliseconds(1),
-            failure: succeeded ? nil : OperationFailure(NSError(
-                domain: NSCocoaErrorDomain, code: 513,
-                userInfo: [NSLocalizedDescriptionKey: "Permission denied."]
-            ))
+            kind: kind, path: "/fixture/support/xc/simulator-pools", outcome: outcome,
+            byteCount: kind == .write ? 32 : nil, duration: .milliseconds(1), contended: contended
         )
     }
 
-    private func report(operations: [ProbeOperation], artifactWrite: ProbeOperation? = nil) -> StorageProbeReport {
+    private func report(
+        operations: [ProbeOperation],
+        artifactWrite: ProbeOperation? = nil,
+        workspace: WorkspaceIdentity? = WorkspaceIdentity(
+            worktreeRoot: URL(fileURLWithPath: "/fixture/project"),
+            repositoryRoot: URL(fileURLWithPath: "/fixture/project"), resolution: .gitWorktree
+        ),
+        artifactPath: URL? = URL(fileURLWithPath: "/fixture/cache/result.json")
+    ) -> StorageProbeReport {
         StorageProbeReport(
             runID: RunIdentifier(),
-            workspace: WorkspaceIdentity(
-                worktreeRoot: URL(fileURLWithPath: "/fixture/project"),
-                repositoryRoot: URL(fileURLWithPath: "/fixture/project"), resolution: .gitWorktree
-            ),
+            workspace: workspace,
             toolVersion: "0.0.1", startedAt: Date(timeIntervalSince1970: 1788748953),
             duration: .milliseconds(12),
             locations: [LocationProbe(
                 role: .applicationSupport, path: "/fixture/support/xc/simulator-pools",
-                completed: operations.allSatisfy(\.succeeded), preexisting: false, operations: operations
+                preexisting: false, operations: operations
             )],
-            artifactPath: URL(fileURLWithPath: "/fixture/cache/result.json"), artifactWrite: artifactWrite
+            artifactPath: artifactPath, artifactWrite: artifactWrite
         )
     }
 }

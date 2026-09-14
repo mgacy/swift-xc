@@ -77,9 +77,11 @@ public enum ProbeResultDocument {
         public let byteCount: Int?
         public let durationMS: Double
         public let error: Failure?
+        /// True when the operation observed contention, and absent otherwise; never false.
+        public let contended: Bool?
 
         private enum CodingKeys: String, CodingKey {
-            case kind, path, succeeded, error
+            case kind, path, succeeded, error, contended
             case byteCount = "byte_count"
             case durationMS = "duration_ms"
         }

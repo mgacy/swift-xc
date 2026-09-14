@@ -35,4 +35,16 @@ public enum StorageRole: String, CaseIterable, Sendable {
         }
         return root.appendingPathComponent(suffix, isDirectory: true)
     }
+
+    /// Whether a directory created for this role is transient and belongs to whatever created it.
+    ///
+    /// Worktree-local directories are transient so a checkout is left clean. Cache and Application
+    /// Support directories are long-lived tool storage, legitimately shared across concurrent
+    /// invocations.
+    public var removesCreatedDirectories: Bool {
+        switch self {
+        case .worktreeBuild, .worktreeDerivedData: true
+        case .userCacheRun, .userCacheCatalog, .userCacheLocks, .applicationSupport: false
+        }
+    }
 }

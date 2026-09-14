@@ -40,8 +40,12 @@ public struct StorageLayout: Sendable {
     ///   - workspace: The resolved workspace identity.
     ///   - runIdentifier: The run identity for the retained directory.
     public init(caches: URL, applicationSupport: URL, workspace: WorkspaceIdentity, runIdentifier: RunIdentifier) {
-        self.init(caches: .success(caches), applicationSupport: .success(applicationSupport),
-                  workspace: .success(workspace), runIdentifier: runIdentifier)
+        self.init(
+            caches: .success(caches),
+            applicationSupport: .success(applicationSupport),
+            workspace: .success(workspace),
+            runIdentifier: runIdentifier
+        )
     }
 
     /// Preserves root failures separately so independent locations remain available.
@@ -51,8 +55,12 @@ public struct StorageLayout: Sendable {
     ///   - applicationSupport: The Application Support root or its resolution failure.
     ///   - workspace: The workspace identity or its resolution failure.
     ///   - runIdentifier: The run identity for the retained directory.
-    public init(caches: Result<URL, StorageResolutionError>, applicationSupport: Result<URL, StorageResolutionError>,
-                workspace: Result<WorkspaceIdentity, WorkspaceResolutionError>, runIdentifier: RunIdentifier) {
+    public init(
+        caches: Result<URL, StorageResolutionError>,
+        applicationSupport: Result<URL, StorageResolutionError>,
+        workspace: Result<WorkspaceIdentity, WorkspaceResolutionError>,
+        runIdentifier: RunIdentifier
+    ) {
         let identity = workspace.mapError { StorageResolutionError(path: $0.path, underlyingError: $0.underlyingError) }
         locations = StorageRole.allCases.map { role in
             let resolution: Result<ResolvedLocation, StorageResolutionError>
@@ -83,8 +91,10 @@ public struct StorageLayout: Sendable {
     /// - Returns: A canonical root or the unmodified Foundation failure with no invented path.
     public static func resolveRoot(_ directory: FileManager.SearchPathDirectory) -> Result<URL, StorageResolutionError> {
         do {
-            return .success(try FileManager.default.url(for: directory, in: .userDomainMask,
-                appropriateFor: nil, create: false).resolvingSymlinksInPath())
+            return .success(
+                try FileManager.default.url(for: directory, in: .userDomainMask, appropriateFor: nil, create: false)
+                    .resolvingSymlinksInPath()
+            )
         } catch {
             return .failure(StorageResolutionError(path: nil, underlyingError: error as NSError))
         }

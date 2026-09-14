@@ -47,33 +47,215 @@ public enum WorkspaceResolver {
             if parent.path == candidate.path { break }
             candidate = parent
         }
-        return WorkspaceIdentity(worktreeRoot: packageRoot ?? working, repositoryRoot: nil,
-                                 resolution: packageRoot == nil ? .workingDirectory : .packageRoot)
+        return WorkspaceIdentity(
+            worktreeRoot: packageRoot ?? working,
+            repositoryRoot: nil,
+            resolution: packageRoot == nil ? .workingDirectory : .packageRoot
+        )
+    }
+
+    /// Reads a single-line path record and resolves it against a base directory.
+    ///
+    /// - Parameters:
+    ///   - file: The record to read.
+    ///   - base: The directory a relative record is resolved against.
+    ///   - prefix: A required leading marker to strip, or nil when the record holds only a path.
+    /// - Returns: A canonical directory URL with symlinks resolved.
+    /// - Throws: `WorkspaceResolutionError` if the record is unreadable, empty, or malformed.
+    private static func pathRecord(
+        _ file: URL,
+        relativeTo base: URL,
+        prefix: String? = nil
+    ) throws(WorkspaceResolutionError) -> URL {
+        let contents: String
+        do {
+            contents = try String(contentsOf: file, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)
+        } catch {
+            throw WorkspaceResolutionError(path: file, underlyingError: error as NSError)
+        }
+        var record = contents
+        if let prefix {
+            guard record.hasPrefix(prefix) else { throw invalid(file, "Expected a \(prefix) pointer.") }
+            record = String(record.dropFirst(prefix.count)).trimmingCharacters(in: .whitespaces)
+        }
+        guard !record.isEmpty, !record.contains("\n") else { throw invalid(file, "The record is empty or malformed.") }
+        return directoryURL(record, relativeTo: base)
     }
 
     /// - Parameters:
-    ///   - worktree: The directory containing the git pointer.
+    ///   - path: An absolute path, or one relative to `base`.
+    ///   - base: The directory a relative path is resolved against.
+    /// - Returns: A canonical directory URL with symlinks resolved.
+    private static func directoryURL(_ path: String, relativeTo base: URL) -> URL {
+        let resolved = path.hasPrefix("/") ? path : (base.path as NSString).appendingPathComponent(path)
+        return URL(fileURLWithPath: resolved, isDirectory: true).standardizedFileURL.resolvingSymlinksInPath()
+    }
+
+    /// Returns the common git directory git recorded for a linked worktree.
+    ///
+    /// Falls back to the conventional `<common>/worktrees/<name>` layout when the record is absent,
+    /// so worktrees written without one still resolve.
+    ///
+    /// - Parameters:
+    ///   - metadata: The worktree's metadata directory.
+    ///   - gitFile: The pointer file, used to attribute a fallback failure.
+    /// - Returns: A canonical directory that exists.
+    /// - Throws: `WorkspaceResolutionError` if the record is malformed or names no directory.
+    private static func commonDirectory(metadata: URL, gitFile: URL) throws(WorkspaceResolutionError) -> URL {
+        let record = metadata.appendingPathComponent("commondir")
+        guard try exists(record) else {
+            let worktrees = metadata.deletingLastPathComponent()
+            guard worktrees.lastPathComponent == "worktrees" else {
+                throw invalid(gitFile, "Expected a <common>/worktrees/<name> metadata directory.")
+            }
+            return worktrees.deletingLastPathComponent()
+        }
+        let common = try pathRecord(record, relativeTo: metadata)
+        guard try isDirectory(common) else {
+            throw invalid(record, "The commondir record does not name a directory.")
+        }
+        return common
+    }
+
+    /// Resolves a linked worktree against the topology recorded for its repository.
+    ///
+    /// `core.bare` decides whether the common directory is itself the repository. A repository that
+    /// records no topology is classified by the conventional `.git` spelling of its common
+    /// directory.
+    ///
+    /// - Parameters:
+    ///   - worktree: The directory containing the pointer.
     ///   - gitFile: The pointer file.
     /// - Returns: The identity associated with standard linked-worktree metadata.
     /// - Throws: `WorkspaceResolutionError` if the pointer cannot be read or resolved.
     private static func linkedIdentity(worktree: URL, gitFile: URL) throws(WorkspaceResolutionError) -> WorkspaceIdentity {
+        let metadata = try pathRecord(gitFile, relativeTo: worktree, prefix: "gitdir:")
+        guard try isDirectory(metadata) else {
+            throw invalid(gitFile, "The gitdir: pointer does not name a metadata directory.")
+        }
+        let common = try commonDirectory(metadata: metadata, gitFile: gitFile)
+        let core = try coreConfiguration(in: common)
+        let bare = core.bare ?? (common.lastPathComponent != ".git")
+        return WorkspaceIdentity(
+            worktreeRoot: worktree,
+            repositoryRoot: bare ? common : try mainWorktree(common: common, recorded: core.worktree),
+            resolution: bare ? .gitBareLinkedWorktree : .gitLinkedWorktree
+        )
+    }
+
+    /// Locates the working tree that a non-bare repository's worktrees branch from.
+    ///
+    /// `core.worktree` is recorded only when the working tree is somewhere other than the parent of
+    /// a `.git` common directory. Nothing names the working tree of a repository that records
+    /// neither, so the common directory stands in as the root its worktrees share.
+    ///
+    /// - Parameters:
+    ///   - common: The common directory.
+    ///   - recorded: The `core.worktree` record, when present.
+    /// - Returns: The main working tree, otherwise the common directory.
+    /// - Throws: `WorkspaceResolutionError` if a recorded working tree does not name a directory.
+    private static func mainWorktree(common: URL, recorded: String?) throws(WorkspaceResolutionError) -> URL {
+        guard let recorded, !recorded.isEmpty else {
+            return common.lastPathComponent == ".git" ? common.deletingLastPathComponent() : common
+        }
+        let worktree = directoryURL(recorded, relativeTo: common)
+        guard try isDirectory(worktree) else {
+            throw invalid(worktree, "The core.worktree record does not name a directory.")
+        }
+        return worktree
+    }
+
+    /// Reads `core.bare` and `core.worktree` from a repository's configuration.
+    ///
+    /// Only the `core` section is scanned, and only for those two keys; every other section, key,
+    /// and include directive is ignored, as is a key written on a section header's own line. A
+    /// subsection names its own keys, so `[core "name"]` is not the `core` section. An absent
+    /// configuration yields no records, so a repository without one still resolves.
+    ///
+    /// - Parameter common: The common directory holding the configuration.
+    /// - Returns: The recorded values, each nil when the key is absent or uninterpretable.
+    /// - Throws: `WorkspaceResolutionError` if a configuration exists but cannot be read.
+    private static func coreConfiguration(
+        in common: URL
+    ) throws(WorkspaceResolutionError) -> (bare: Bool?, worktree: String?) {
+        let file = common.appendingPathComponent("config")
+        guard try exists(file) else { return (nil, nil) }
         let contents: String
         do {
-            contents = try String(contentsOf: gitFile, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)
+            contents = try String(contentsOf: file, encoding: .utf8)
         } catch {
-            throw WorkspaceResolutionError(path: gitFile, underlyingError: error as NSError)
+            throw WorkspaceResolutionError(path: file, underlyingError: error as NSError)
         }
-        guard contents.hasPrefix("gitdir:") else { throw invalid(gitFile, "Expected a gitdir: pointer.") }
-        let pointer = String(contents.dropFirst(7)).trimmingCharacters(in: .whitespaces)
-        guard !pointer.isEmpty, !pointer.contains("\n") else { throw invalid(gitFile, "The gitdir: pointer is empty or malformed.") }
-        let metadataPath = pointer.hasPrefix("/") ? pointer : (worktree.path as NSString).appendingPathComponent(pointer)
-        let metadata = URL(fileURLWithPath: metadataPath, isDirectory: true).standardizedFileURL.resolvingSymlinksInPath()
-        let worktrees = metadata.deletingLastPathComponent()
-        let common = worktrees.deletingLastPathComponent()
-        guard worktrees.lastPathComponent == "worktrees", common.lastPathComponent == ".git", try isDirectory(metadata) else {
-            throw invalid(gitFile, "Expected a .git/worktrees/<name> metadata directory.")
+        var core = false
+        var bare: Bool?
+        var worktree: String?
+        for line in contents.split(whereSeparator: \.isNewline) {
+            let statement = line.trimmingCharacters(in: .whitespaces)
+            if statement.isEmpty || statement.hasPrefix("#") || statement.hasPrefix(";") { continue }
+            if statement.hasPrefix("[") {
+                let header = statement.dropFirst().prefix { $0 != "]" }
+                core = header.trimmingCharacters(in: .whitespaces).lowercased() == "core"
+                continue
+            }
+            guard core else { continue }
+            let separator = statement.firstIndex(of: "=")
+            let key = statement[..<(separator ?? statement.endIndex)].trimmingCharacters(in: .whitespaces).lowercased()
+            let value = separator.map { String(statement[statement.index(after: $0)...]) }
+            switch key {
+            case "bare": bare = booleanRecord(value)
+            case "worktree": worktree = value.map(unquoted)
+            default: continue
+            }
         }
-        return WorkspaceIdentity(worktreeRoot: worktree, repositoryRoot: common.deletingLastPathComponent(), resolution: .gitLinkedWorktree)
+        return (bare, worktree)
+    }
+
+    /// Reads a configuration value the way git reads a boolean.
+    ///
+    /// - Parameter value: A configuration value, or nil when the key carries none.
+    /// - Returns: The value read as a boolean, or nil when it names neither. A key written without
+    ///   a value is true; a key written with an empty one is false.
+    private static func booleanRecord(_ value: String?) -> Bool? {
+        guard let value else { return true }
+        switch unquoted(value).lowercased() {
+        case "true", "yes", "on", "1": return true
+        case "", "false", "no", "off", "0": return false
+        default: return nil
+        }
+    }
+
+    /// Strips the quoting and trailing comment from a configuration value.
+    ///
+    /// `\n`, `\t`, and `\b` are translated, and any other escaped character is kept as written.
+    /// Surrounding whitespace is always trimmed, including whitespace that was written inside
+    /// quotes.
+    ///
+    /// - Parameter value: The raw text following a key's `=`.
+    /// - Returns: The value's content.
+    private static func unquoted(_ value: String) -> String {
+        var content = ""
+        var quoted = false
+        var escaped = false
+        for character in value {
+            if escaped {
+                switch character {
+                case "n": content.append("\n")
+                case "t": content.append("\t")
+                case "b": content.append("\u{08}")
+                default: content.append(character)
+                }
+                escaped = false
+            } else if character == "\\" {
+                escaped = true
+            } else if character == "\"" {
+                quoted.toggle()
+            } else if !quoted, character == "#" || character == ";" {
+                break
+            } else {
+                content.append(character)
+            }
+        }
+        return content.trimmingCharacters(in: .whitespaces)
     }
 
     /// - Parameter url: The path to inspect.
@@ -81,8 +263,14 @@ public enum WorkspaceResolver {
     /// - Throws: `WorkspaceResolutionError` if the path is missing or inaccessible.
     private static func isDirectory(_ url: URL) throws(WorkspaceResolutionError) -> Bool {
         guard let directory = try directoryIfPresent(url) else {
-            throw WorkspaceResolutionError(path: url, underlyingError: NSError(domain: NSCocoaErrorDomain,
-                code: NSFileReadNoSuchFileError, userInfo: [NSFilePathErrorKey: url.path]))
+            throw WorkspaceResolutionError(
+                path: url,
+                underlyingError: NSError(
+                    domain: NSCocoaErrorDomain,
+                    code: NSFileReadNoSuchFileError,
+                    userInfo: [NSFilePathErrorKey: url.path]
+                )
+            )
         }
         return directory
     }
@@ -100,12 +288,25 @@ public enum WorkspaceResolver {
         }
     }
 
+    /// - Parameter url: The path to inspect.
+    /// - Returns: Whether an item exists at the path.
+    /// - Throws: `WorkspaceResolutionError` if metadata cannot be read.
+    private static func exists(_ url: URL) throws(WorkspaceResolutionError) -> Bool {
+        try directoryIfPresent(url) != nil
+    }
+
     /// - Parameters:
     ///   - path: The invalid input path.
     ///   - message: The reason the input is invalid.
     /// - Returns: A typed error carrying Cocoa corrupt-file evidence.
     private static func invalid(_ path: URL, _ message: String) -> WorkspaceResolutionError {
-        WorkspaceResolutionError(path: path, underlyingError: NSError(domain: NSCocoaErrorDomain,
-            code: NSFileReadCorruptFileError, userInfo: [NSLocalizedDescriptionKey: message, NSFilePathErrorKey: path.path]))
+        WorkspaceResolutionError(
+            path: path,
+            underlyingError: NSError(
+                domain: NSCocoaErrorDomain,
+                code: NSFileReadCorruptFileError,
+                userInfo: [NSLocalizedDescriptionKey: message, NSFilePathErrorKey: path.path]
+            )
+        )
     }
 }
