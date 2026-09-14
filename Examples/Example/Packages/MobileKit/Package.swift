@@ -21,7 +21,13 @@ let package = Package(
                 .product(name: "SharedKit", package: "SharedKit")
             ]
         ),
-        .testTarget(name: "MobileKitTests", dependencies: ["MobileKit"])
+        .testTarget(
+            name: "MobileKitTests",
+            dependencies: [
+                "MobileKit",
+                .product(name: "SharedKit", package: "SharedKit")
+            ]
+        )
     ],
     swiftLanguageModes: [.v6]
 )
